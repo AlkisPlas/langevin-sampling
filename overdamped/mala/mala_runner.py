@@ -9,6 +9,7 @@ class MALA(ABC):
         self.burn_in = burn_in
         self.x0 = np.zeros(d) if x0 is None else np.array(x0)
         self.samples = np.zeros((n_steps, d))
+        self.n_accepted = 0  # Track number of accepted proposals
 
         if seed is not None:
             np.random.seed(seed)
@@ -54,14 +55,18 @@ class MALA(ABC):
 
     def run(self):
         x = self.x0.copy()
+        self.n_accepted = 0  # Reset counter
+
         for t in range(self.n_steps):
             x_prop = self.get_proposal(x)
             log_alpha = self.compute_acceptance_log_ratio(x, x_prop)
 
             if np.log(np.random.rand()) < log_alpha:
                 x = x_prop
+                self.n_accepted += 1
 
             self.samples[t] = x
 
         self.samples_post = self.samples[self.burn_in:]
+        self.acceptance_rate = self.n_accepted / self.n_steps
         return self.samples_post
