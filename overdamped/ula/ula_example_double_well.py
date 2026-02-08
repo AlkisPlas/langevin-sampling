@@ -19,7 +19,7 @@ class DoubleWellDiagnostics(ComprehensiveDiagnostics):
 
 # Run the sampler
 print("Running Double-Well ULA sampler...")
-ula = DoubleWellULA(d=1, eta=0.01, n_steps=1_000_000, burn_in=10_000, seed=42)
+ula = DoubleWellULA(d=1, eta=0.15, n_steps=1_000_000, burn_in=10_000, seed=42)
 samples_post = ula.run()
 
 print("\nGenerating comprehensive diagnostics...\n")

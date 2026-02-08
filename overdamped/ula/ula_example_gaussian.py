@@ -30,15 +30,15 @@ class GaussianDiagnostics(ComprehensiveDiagnostics):
 
 # Run the sampler
 print("Running Gaussian ULA sampler...")
-ula = GaussianULA(d=3, eta=0.01, n_steps=100000, burn_in=10000, seed=42)
+ula = GaussianULA(d=1, eta=0.6, n_steps=100000, burn_in=10000, seed=42)
 samples_post = ula.run()
 
 print("\nGenerating comprehensive diagnostics...\n")
-diagnostics = GaussianDiagnostics(samples_post, d=3)
+diagnostics = GaussianDiagnostics(samples_post, d=1)
 diagnostics.print_comprehensive_stats()
 
 # Visualizations
 print("\nGenerating visualizations...")
-diagnostics.plot_trace(dims=[0, 1])
-diagnostics.plot_autocorrelation(max_lag=100, dims=[0, 1])
+diagnostics.plot_trace(dims=[0])
+diagnostics.plot_autocorrelation(max_lag=100, dims=[0])
 diagnostics.plot_tail_exploration(dim=0)

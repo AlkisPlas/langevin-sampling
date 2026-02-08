@@ -35,7 +35,7 @@ class GaussianDiagnostics(ComprehensiveDiagnostics):
 
 # Run the sampler
 print("Running Gaussian MALA sampler...")
-mala = GaussianMALA(d=3, eta=0.01, n_steps=100000, burn_in=10000, seed=42)
+mala = GaussianMALA(d=3, eta=0.6, n_steps=100000, burn_in=10000, seed=42)
 samples_post = mala.run()
 
 print("\nGenerating comprehensive diagnostics...\n")

@@ -34,7 +34,7 @@ class CauchyDiagnostics(ComprehensiveDiagnostics):
             return self.location[dim] + self.scale * q
     
 print("Running Cauchy MALA sampler...")
-mala = CauchyMALA(d=1, eta=0.01, n_steps=100000, burn_in=10000, seed=42)
+mala = CauchyMALA(d=1, eta=4, n_steps=1000000, burn_in=10000, seed=42)
 samples_post = mala.run()
 
 print("\nGenerating comprehensive diagnostics...\n")

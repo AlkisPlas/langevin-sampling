@@ -84,7 +84,7 @@ print("Properties: Mean=1, Variance=1, Median≈0.693\n")
 # Use rate=1 (standard exponential) and start at mean
 ula = ExponentialULA(
     d=3,
-    eta=0.01,
+    eta=0.1,
     n_steps=100000,
     burn_in=10000,
     rate=1.0,

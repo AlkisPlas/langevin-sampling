@@ -57,7 +57,7 @@ class LognormalDiagnostics(ComprehensiveDiagnostics):
 
 # Run the sampler
 print("Running Lognormal MALA sampler...")
-mala = LognormalMALA(d=3, eta=0.01, n_steps=100000, burn_in=10000, x0=np.ones(3), seed=42)
+mala = LognormalMALA(d=3, eta=0.1, n_steps=100000, burn_in=10000, x0=np.ones(3), seed=42)
 samples_post = mala.run()
 
 print("\nGenerating comprehensive diagnostics...\n")

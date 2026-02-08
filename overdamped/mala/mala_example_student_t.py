@@ -92,7 +92,7 @@ print("Running Student's t MALA sampler...")
 print("Distribution: t(nu=3, location=0, scale=1)")
 print("Note: nu=3 gives moderate heavy tails (variance exists but 4th moment doesn't)\n")
 
-mala = StudentTMALA(d=3, eta=0.01, n_steps=100000, burn_in=10000, nu=3.0, seed=42)
+mala = StudentTMALA(d=3, eta=0.7, n_steps=100000, burn_in=10000, nu=3.0, seed=42)
 samples_post = mala.run()
 
 print("\nGenerating comprehensive diagnostics...\n")
