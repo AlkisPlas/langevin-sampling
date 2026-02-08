@@ -26,7 +26,7 @@ class DoubleWellDiagnostics(ComprehensiveDiagnostics):
 
 # Run the sampler
 print("Running Double-Well MALA sampler...")
-mala = DoubleWellMALA(d=1, eta=1, n_steps=1_000_000, burn_in=10_000, seed=42)
+mala = DoubleWellMALA(d=1, eta=1, n_steps=100000, burn_in=10000, seed=42)
 samples_post = mala.run()
 
 print("\nGenerating comprehensive diagnostics...\n")
