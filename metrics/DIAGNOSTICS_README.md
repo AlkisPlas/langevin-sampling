@@ -156,10 +156,3 @@ Dim 0:
 2. **May have discretization bias** (check quantile divergence)
 3. **Generally lower ESS than MALA** at same step size
 4. **Faster per iteration** (no acceptance computation)
-
-## Files
-
-- `comprehensive_diagnostics.py` - Main diagnostics class
-- `median_and_quantile_diagnostics.py` - Legacy simple diagnostics
-- `mala_example_gaussian_comprehensive.py` - MALA example with full diagnostics
-- `ula_example_gaussian_comprehensive.py` - ULA example with full diagnostics

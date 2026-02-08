@@ -1,6 +1,6 @@
 # Langevin Sampling Algorithms
 
-A comprehensive, production-ready implementation of **Overdamped Langevin Sampling** algorithms (MALA and ULA) with extensive diagnostics for MCMC analysis.
+A comprehensive implementation of **Overdamped Langevin Sampling** algorithms (MALA and ULA) with extensive diagnostics for MCMC analysis.
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![NumPy](https://img.shields.io/badge/NumPy-required-orange.svg)](https://numpy.org/)
@@ -83,9 +83,7 @@ This implementation provides **6 distributions** covering a wide range of sampli
 - ✅ Good for quick exploration
 - 📘 **Update:** `x_{t+1} = x_t - η∇f(x_t) + √(2η)ξ_t`
 
-### Comprehensive Diagnostics
-
-Our diagnostic suite provides deep insights into sampler performance:
+### Distribution Diagnostics
 
 | Metric | Description | Purpose |
 |--------|-------------|---------|
@@ -201,40 +199,6 @@ python overdamped/ula/ula_example_double_well.py
 
 ---
 
-## 📁 Project Structure
-
-```
-langevin-sampling/
-├── README.md                          # This file
-│
-├── overdamped/                        # Overdamped Langevin implementations
-│   │
-│   ├── mala/                         # MALA implementations
-│   │   ├── mala_runner.py           # Abstract base class
-│   │   ├── mala_example_gaussian.py
-│   │   ├── mala_example_exponential.py
-│   │   ├── mala_example_student_t.py
-│   │   ├── mala_example_cauchy.py
-│   │   ├── mala_example_lognormal.py
-│   │   └── mala_example_double_well.py
-│   │
-│   └── ula/                          # ULA implementations
-│       ├── ula_runner.py            # Abstract base class
-│       ├── ula_example_gaussian.py
-│       ├── ula_example_exponential.py
-│       ├── ula_example_student_t.py
-│       ├── ula_example_cauchy.py
-│       ├── ula_example_lognormal.py
-│       └── ula_example_double_well.py
-│
-└── metrics/                           # Diagnostics
-    ├── comprehensive_diagnostics.py   # Main diagnostics class
-    ├── median_and_quantile_diagnostics.py  # Legacy simple diagnostics
-    └── DIAGNOSTICS_README.md         # Diagnostics documentation
-```
-
----
-
 ## 🔧 Installation
 
 ### Requirements
@@ -335,51 +299,5 @@ X_{t+1} = X_t - η∇f(X_t) + √(2η)ξ_t,  ξ_t ~ N(0,I)
 2. Accept with probability: `min(1, π(X')q(X_t|X') / (π(X_t)q(X'|X_t)))`
 
 where `q(·|·)` is the proposal density.
-
----
-
-## 📊 Example Output
-
-```
-======================================================================
-COMPREHENSIVE MCMC DIAGNOSTICS
-======================================================================
-
-Sample size: 90000
-Dimensions: 3
-
---- ACCEPTANCE RATE ---
-Acceptance rate: 0.574
-
---- EFFECTIVE SAMPLE SIZE (ESS) ---
-Dim 0: ESS = 8234.5 (9.15% of total samples)
-Dim 1: ESS = 8123.2 (9.03% of total samples)
-Dim 2: ESS = 8345.7 (9.27% of total samples)
-
---- DIVERGENCE METRICS ---
-Divergent samples rate: 0.0000
-
-Quantile MAE (Mean Absolute Error):
-  Dim 0: 0.0124
-  Dim 1: 0.0131
-  Dim 2: 0.0118
-
---- TAIL EXPLORATION ---
-
-Dim 0:
-  ✓ q_0.01: coverage=0.011, expected=0.010
-  ✓ q_0.05: coverage=0.052, expected=0.050
-  ✓ q_0.95: coverage=0.049, expected=0.050
-  ✓ q_0.99: coverage=0.010, expected=0.010
-
---- BASIC STATISTICS ---
-
-Dim 0:
-  Mean: 0.003
-  Empirical median: 0.002
-  Theoretical median: 0.000
-  Std dev: 0.998
-  MAD: 0.673
-```
 
 ---
