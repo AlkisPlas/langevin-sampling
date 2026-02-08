@@ -42,9 +42,14 @@ class ComprehensiveDiagnostics(ABC):
             max_lag = min(len(x) // 2, 1000)
 
         x = x - np.mean(x)
-        autocorr = np.correlate(x, x, mode='full')
-        autocorr = autocorr[len(autocorr)//2:]
+        #autocorr = np.correlate(x, x, mode='full')
+        #autocorr = autocorr[len(autocorr)//2:]
+        n = len(x)
+        fft_size = 2 ** int(np.ceil(np.log2(2 * n - 1)))
+        fft_x = np.fft.fft(x, n=fft_size)
+        autocorr = np.fft.ifft(fft_x * np.conj(fft_x)).real[:max_lag]
         autocorr = autocorr / autocorr[0]
+
         return autocorr[:max_lag]
 
     def compute_ess(self, dim=None):
@@ -60,7 +65,8 @@ class ComprehensiveDiagnostics(ABC):
         n = len(x)
 
         # Compute autocorrelation
-        acf = self.compute_autocorrelation(x)
+        max_lag = min(n // 2, 500)
+        acf = self.compute_autocorrelation(x, max_lag=max_lag)
 
         # Sum autocorrelations until they become negative or very small
         # (initial positive sequence estimator)
