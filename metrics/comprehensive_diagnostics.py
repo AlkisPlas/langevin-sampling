@@ -313,7 +313,7 @@ class ComprehensiveDiagnostics(ABC):
 
         print("\n" + "=" * 70)
 
-    def plot_trace(self, dims=None, max_samples=5000):
+    def plot_trace(self, dims=None, max_samples=50000):
         """
         Plot trace plots for specified dimensions.
         """
