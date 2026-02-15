@@ -1,7 +1,6 @@
-from metrics.comprehensive_diagnostics import ComprehensiveDiagnostics
 import numpy as np
-import matplotlib.pyplot as plt
 from underdamped.kinetic.splitting.baoab.kinetic_baoab_runner import BAOAB
+from metrics.comprehensive_diagnostics import ComprehensiveDiagnostics
 
 class CauchyBAOAB(BAOAB):
     def __init__(self, d, eta, gamma, n_steps, burn_in, location=None, scale=1.0,
@@ -19,10 +18,8 @@ class CauchyBAOAB(BAOAB):
         return (self.d + 1) * diff / (self.scale**2 + np.sum(diff**2))
 
 class CauchyDiagnostics(ComprehensiveDiagnostics):
-    def __init__(self, samples_post, location=None, scale=1.0):
-        super().__init__(samples_post, quantile_levels=[0.025, 0.5, 0.975],
-                        acceptance_rate=None)
-        n_samples, d = samples_post.shape
+    def __init__(self, samples_post, d, location=None, scale=1.0):
+        super().__init__(samples_post, quantile_levels=[0.025, 0.5, 0.975])
         self.location = np.zeros(d) if location is None else np.array(location)
         self.scale = scale
 
@@ -33,11 +30,11 @@ class CauchyDiagnostics(ComprehensiveDiagnostics):
         else:
             return self.location[dim] + self.scale * q
 
-cauchy_baoab = CauchyBAOAB(d=1, eta=1, gamma=1, n_steps=100000, burn_in=10000, seed=42)
-samples_post = cauchy_baoab.run()
+kinetic = CauchyBAOAB(d=1, eta=1, gamma=1, n_steps=100000, burn_in=10000, seed=42)
+samples_post = kinetic.run()
 
 print("\nGenerating comprehensive diagnostics...\n")
-diagnostics = CauchyDiagnostics(samples_post)
+diagnostics = CauchyDiagnostics(samples_post, d=1)
 diagnostics.print_comprehensive_stats()
 
 print("\nGenerating visualizations...")
