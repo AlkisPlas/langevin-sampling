@@ -30,15 +30,16 @@ class CauchyDiagnostics(ComprehensiveDiagnostics):
         else:
             return self.location[dim] + self.scale * q
 
-kinetic = CauchyBAOAB(d=1, eta=0.2, gamma=2, n_steps=1000000, burn_in=100000, seed=42)
+kinetic = CauchyBAOAB(d=3, eta=0.2, gamma=2, n_steps=1000000, burn_in=10000, seed=42)
 samples_post = kinetic.run()
-samples_post = samples_post[::10]  # Thin samples
+#samples_post = samples_post[::100]  # Thin samples
 
 print("\nGenerating comprehensive diagnostics...\n")
-diagnostics = CauchyDiagnostics(samples_post, d=1)
+diagnostics = CauchyDiagnostics(samples_post, d=3)
 diagnostics.print_comprehensive_stats()
 
 print("\nGenerating visualizations...")
-diagnostics.plot_trace(dims=[0], max_samples=100000)
-diagnostics.plot_autocorrelation(max_lag=100, dims=[0])
+diagnostics.plot_trace(dims=[0,1,2], max_samples=1000000)
+diagnostics.plot_autocorrelation(max_lag=100, dims=[0,1,2])
 diagnostics.plot_tail_exploration(dim=0)
+diagnostics.plot_quantile_mae_over_time()

@@ -32,7 +32,7 @@ class GaussianDiagnostics(ComprehensiveDiagnostics):
         else:
             return self.mu[dim] + self.std[dim] * norm.ppf(p)
 
-kinetic = GaussianBAOAB(d=1, eta=1, gamma=1, n_steps=100000, burn_in=10000, seed=42)
+kinetic = GaussianBAOAB(d=1, eta=1, gamma=2, n_steps=100000, burn_in=10000, seed=42)
 samples_post = kinetic.run()
 
 print("\nGenerating comprehensive diagnostics...\n")
@@ -43,3 +43,4 @@ print("\nGenerating visualizations...")
 diagnostics.plot_trace(dims=[0])
 diagnostics.plot_autocorrelation(max_lag=100, dims=[0])
 diagnostics.plot_tail_exploration(dim=0)
+diagnostics.plot_quantile_mae_over_time()
