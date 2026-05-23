@@ -35,15 +35,16 @@ class GaussianDiagnostics(ComprehensiveDiagnostics):
 
 # Run the sampler
 print("Running Gaussian MALA sampler...")
-mala = GaussianMALA(d=3, eta=0.6, n_steps=100000, burn_in=10000, seed=42)
+mala = GaussianMALA(d=1, eta=1.2, n_steps=100000, burn_in=10000, seed=42)
 samples_post = mala.run()
 
 print("\nGenerating comprehensive diagnostics...\n")
-diagnostics = GaussianDiagnostics(samples_post, d=3, acceptance_rate=mala.acceptance_rate)
+diagnostics = GaussianDiagnostics(samples_post, d=1, acceptance_rate=mala.acceptance_rate)
 diagnostics.print_comprehensive_stats()
 
 # Visualizations
 print("\nGenerating visualizations...")
-diagnostics.plot_trace(dims=[0, 1])
-diagnostics.plot_autocorrelation(max_lag=100, dims=[0, 1])
+diagnostics.plot_trace(dims=[0])
+diagnostics.plot_autocorrelation(max_lag=100, dims=[0])
 diagnostics.plot_tail_exploration(dim=0)
+diagnostics.plot_quantile_mae_over_time()

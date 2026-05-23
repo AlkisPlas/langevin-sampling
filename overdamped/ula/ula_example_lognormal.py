@@ -45,15 +45,16 @@ class LognormalDiagnostics(ComprehensiveDiagnostics):
 
 # Run the sampler
 print("Running Lognormal ULA sampler...")
-ula = LognormalULA(d=3, eta=0.01, n_steps=100000, burn_in=10000, x0=np.ones(3), seed=42)
+ula = LognormalULA(d=1, eta=0.01, n_steps=100000, burn_in=10000, x0=np.ones(1), seed=42)
 samples_post = ula.run()
 
 print("\nGenerating comprehensive diagnostics...\n")
-diagnostics = LognormalDiagnostics(samples_post, d=3)
+diagnostics = LognormalDiagnostics(samples_post, d=1)
 diagnostics.print_comprehensive_stats()
 
 # Visualizations
 print("\nGenerating visualizations...")
-diagnostics.plot_trace(dims=[0, 1])
-diagnostics.plot_autocorrelation(max_lag=100, dims=[0, 1])
+diagnostics.plot_trace(dims=[0])
+diagnostics.plot_autocorrelation(max_lag=100, dims=[0])
 diagnostics.plot_tail_exploration(dim=0)
+diagnostics.plot_quantile_mae_over_time()

@@ -92,15 +92,15 @@ print("Running Student's t MALA sampler...")
 print("Distribution: t(nu=3, location=0, scale=1)")
 print("Note: nu=3 gives moderate heavy tails (variance exists but 4th moment doesn't)\n")
 
-mala = StudentTMALA(d=3, eta=0.7, n_steps=100000, burn_in=10000, nu=3.0, seed=42)
+mala = StudentTMALA(d=1, eta=0.7, n_steps=1000000, burn_in=10000, nu=5, seed=42)
 samples_post = mala.run()
 
 print("\nGenerating comprehensive diagnostics...\n")
-diagnostics = StudentTDiagnostics(samples_post, d=3, nu=3.0, acceptance_rate=mala.acceptance_rate)
+diagnostics = StudentTDiagnostics(samples_post, d=1, nu=5, acceptance_rate=mala.acceptance_rate)
 diagnostics.print_comprehensive_stats()
 
 # Visualizations
 print("\nGenerating visualizations...")
-diagnostics.plot_trace(dims=[0, 1])
-diagnostics.plot_autocorrelation(max_lag=100, dims=[0, 1])
+diagnostics.plot_trace(dims=[0])
+diagnostics.plot_autocorrelation(max_lag=100, dims=[0])
 diagnostics.plot_tail_exploration(dim=0)

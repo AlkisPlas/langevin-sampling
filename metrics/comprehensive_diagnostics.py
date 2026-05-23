@@ -139,6 +139,70 @@ class ComprehensiveDiagnostics(ABC):
             divergences.append(mae)
         return np.array(divergences)
 
+
+    def plot_quantile_mae_over_time(self, checkpoints=None):
+        """
+        Plot the average Quantile MAE across all dimensions over time.
+
+        Parameters:
+        -----------
+        checkpoints : list or None
+            List of sample sizes at which to evaluate MAE.
+            If None, uses a default logarithmic spacing.
+        """
+
+        # Check if theoretical quantiles are available
+        test_quantile = self.quantile(0.5, dim=0)
+        if np.isnan(test_quantile):
+            print("Quantile MAE over time: N/A (no theoretical quantiles available)")
+            return
+
+        # Default checkpoints (log-spaced for better visualization)
+        if checkpoints is None:
+            checkpoints = np.unique(
+                np.logspace(3, np.log10(self.n_samples), num=20, dtype=int)
+            )
+
+        checkpoints = [c for c in checkpoints if c <= self.n_samples]
+
+        mae_values = []
+
+        for n in checkpoints:
+            subset = self.samples[:n]
+
+            mae_per_dim = []
+
+            for dim in range(self.d):
+                data = subset[:, dim]
+
+                # Empirical quantiles
+                emp_q = np.percentile(
+                    data, [q * 100 for q in self.quantile_levels]
+                )
+
+                # Theoretical quantiles
+                theor_q = np.array(
+                    [self.quantile(q, dim=dim) for q in self.quantile_levels]
+                )
+
+                mae_dim = np.mean(np.abs(emp_q - theor_q))
+                mae_per_dim.append(mae_dim)
+
+            # Average across dimensions
+            mae_values.append(np.mean(mae_per_dim))
+
+        # Plot
+        plt.figure(figsize=(8, 5))
+        plt.plot(checkpoints, mae_values, marker='o', linewidth=2)
+
+        plt.xlabel("Number of Samples")
+        plt.ylabel("Average Quantile MAE")
+        plt.title("Quantile MAE Convergence (Averaged over Dimensions)")
+        plt.xscale("log")  # important for readability
+        plt.grid(alpha=0.3)
+
+        plt.show()
+
     # ========================================
     # Tail Exploration
     # ========================================
@@ -304,7 +368,7 @@ class ComprehensiveDiagnostics(ABC):
             std = np.std(data)
             theor_median = self.quantile(0.5, dim=dim)
             print(f"\nDim {dim}:")
-            print(f"  Mean: {mean:.3f}")
+            print(f"  Empirical mean: {mean:.3f}")
             print(f"  Empirical median: {median:.3f}")
             if not np.isnan(theor_median):
                 print(f"  Theoretical median: {theor_median:.3f}")

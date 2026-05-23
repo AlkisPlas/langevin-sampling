@@ -4,7 +4,7 @@ from metrics.comprehensive_diagnostics import ComprehensiveDiagnostics
 from overdamped.ula.ula_runner import ULA
 
 class StudentTULA(ULA):
-    def __init__(self, d, eta, n_steps, burn_in, nu=3.0, location=None, scale=None, x0=None, seed=None):
+    def __init__(self, d, eta, n_steps, burn_in, nu, location=None, scale=None, x0=None, seed=None):
         """
         Student's t-distribution sampler using ULA.
 
@@ -81,15 +81,16 @@ print("Running Student's t ULA sampler...")
 print("Distribution: t(nu=3, location=0, scale=1)")
 print("Note: nu=3 gives moderate heavy tails (variance exists but 4th moment doesn't)\n")
 
-ula = StudentTULA(d=3, eta=0.01, n_steps=100000, burn_in=10000, nu=3.0, seed=42)
+ula = StudentTULA(d=1, eta=0.6, n_steps=100000, burn_in=10000, nu=5, seed=42)
 samples_post = ula.run()
 
 print("\nGenerating comprehensive diagnostics...\n")
-diagnostics = StudentTDiagnostics(samples_post, d=3, nu=3.0)
+diagnostics = StudentTDiagnostics(samples_post, d=1, nu=5)
 diagnostics.print_comprehensive_stats()
 
 # Visualizations
 print("\nGenerating visualizations...")
-diagnostics.plot_trace(dims=[0, 1])
-diagnostics.plot_autocorrelation(max_lag=100, dims=[0, 1])
+diagnostics.plot_trace(dims=[0])
+diagnostics.plot_autocorrelation(max_lag=100, dims=[0])
 diagnostics.plot_tail_exploration(dim=0)
+diagnostics.plot_quantile_mae_over_time()
