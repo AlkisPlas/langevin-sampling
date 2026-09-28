@@ -109,7 +109,7 @@ This implementation provides **6 distributions** covering a wide range of sampli
 
 ```python
 import numpy as np
-from overdamped.mala.mala_example_gaussian import GaussianMALA, GaussianDiagnostics
+from targets.targets import GaussianMALA, GaussianDiagnostics
 
 # 1. Create sampler
 sampler = GaussianMALA(
@@ -143,7 +143,7 @@ diagnostics.plot_tail_exploration(dim=0)
 
 ```python
 # Gaussian with custom mean and covariance
-from overdamped.mala.mala_example_gaussian import GaussianMALA
+from targets.targets import GaussianMALA
 
 mu = np.array([1.0, 2.0, 3.0])
 Sigma = np.diag([1.0, 2.0, 3.0])  # diagonal covariance
@@ -161,7 +161,7 @@ sampler = GaussianMALA(
 
 ```python
 # Student-t with custom parameters
-from overdamped.mala.mala_example_student_t import StudentTMALA
+from targets.targets import StudentTMALA
 
 sampler = StudentTMALA(
     d=3,
@@ -181,20 +181,20 @@ All distributions have ready-to-run examples:
 
 ```bash
 # MALA examples
-python overdamped/mala/mala_example_gaussian.py
-python overdamped/mala/mala_example_exponential.py
-python overdamped/mala/mala_example_student_t.py
-python overdamped/mala/mala_example_cauchy.py
-python overdamped/mala/mala_example_lognormal.py
-python overdamped/mala/mala_example_double_well.py
+python examples/overdamped/mala/mala_example_gaussian.py
+python examples/overdamped/mala/mala_example_exponential.py
+python examples/overdamped/mala/mala_example_student_t.py
+python examples/overdamped/mala/mala_example_cauchy.py
+python examples/overdamped/mala/mala_example_lognormal.py
+python examples/overdamped/mala/mala_example_double_well.py
 
 # ULA examples
-python overdamped/ula/ula_example_gaussian.py
-python overdamped/ula/ula_example_exponential.py
-python overdamped/ula/ula_example_student_t.py
-python overdamped/ula/ula_example_cauchy.py
-python overdamped/ula/ula_example_lognormal.py
-python overdamped/ula/ula_example_double_well.py
+python examples/overdamped/ula/ula_example_gaussian.py
+python examples/overdamped/ula/ula_example_exponential.py
+python examples/overdamped/ula/ula_example_student_t.py
+python examples/overdamped/ula/ula_example_cauchy.py
+python examples/overdamped/ula/ula_example_lognormal.py
+python examples/overdamped/ula/ula_example_double_well.py
 ```
 
 ---
