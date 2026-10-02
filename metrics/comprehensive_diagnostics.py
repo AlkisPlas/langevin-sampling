@@ -114,16 +114,20 @@ class ComprehensiveDiagnostics(ABC):
     # ========================================
     def compute_divergence_rate(self, threshold=1e6):
         """
-        Compute the rate of divergent samples (samples exceeding threshold).
+        Compute the rate of divergent samples: samples that exceed the threshold
+        or are not finite (an overflow gives inf, then NaN, and a comparison with
+        NaN is always False, so the threshold test alone does not count it).
         """
-        n_divergent = np.sum(np.any(np.abs(self.samples) > threshold, axis=1))
+        bad = ~np.isfinite(self.samples) | (np.abs(self.samples) > threshold)
+        n_divergent = np.sum(np.any(bad, axis=1))
         return n_divergent / self.n_samples
 
     def compute_quantile_divergence(self):
         """
         Compute divergence between empirical and theoretical quantiles.
-        Returns mean absolute error across all dimensions and quantiles.
-        Returns None if theoretical quantiles are not available (NaN).
+        Returns the mean absolute error per dimension, over the dimensions that
+        have theoretical quantiles (dimensions without them are skipped).
+        Returns None if no dimension has theoretical quantiles.
         """
         divergences = []
         for dim in range(self.d):
@@ -131,13 +135,13 @@ class ComprehensiveDiagnostics(ABC):
             emp_quantiles = np.percentile(data, [q*100 for q in self.quantile_levels])
             theor_quantiles = np.array([self.quantile(q, dim=dim) for q in self.quantile_levels])
 
-            # Check if theoretical quantiles are available
+            # Skip dimensions without a closed-form marginal
             if np.any(np.isnan(theor_quantiles)):
-                return None
+                continue
 
             mae = np.mean(np.abs(emp_quantiles - theor_quantiles))
             divergences.append(mae)
-        return np.array(divergences)
+        return np.array(divergences) if divergences else None
 
 
     def plot_quantile_mae_over_time(self, checkpoints=None):
@@ -209,16 +213,15 @@ class ComprehensiveDiagnostics(ABC):
     def compute_tail_coverage(self, tail_quantiles=[0.01, 0.05, 0.95, 0.99]):
         """
         Measure how well the sampler explores the tails.
-        Returns the percentage of samples that reach various tail quantiles.
-        Returns None if theoretical quantiles are not available (NaN).
+        Returns the percentage of samples that reach various tail quantiles,
+        for the dimensions that have theoretical quantiles (dimensions without
+        them are skipped). Returns None if no dimension has them.
         """
-        # Check if theoretical quantiles are available
-        test_quantile = self.quantile(0.5, dim=0)
-        if np.isnan(test_quantile):
-            return None
-
         tail_stats = {}
         for dim in range(self.d):
+            # Skip dimensions without a closed-form marginal
+            if np.isnan(self.quantile(0.5, dim=dim)):
+                continue
             data = self.samples[:, dim]
             stats = {}
             for q in tail_quantiles:
@@ -235,7 +238,7 @@ class ComprehensiveDiagnostics(ABC):
                     'expected': q if q < 0.5 else (1 - q)
                 }
             tail_stats[f'dim_{dim}'] = stats
-        return tail_stats
+        return tail_stats if tail_stats else None
 
     def plot_tail_exploration(self, dim=0):
         """

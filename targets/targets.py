@@ -18,7 +18,7 @@ Geometric family (the extension; each probes one distinct difficulty axis):
   - banana               : non-linear correlation (product of 2D Rosenbrock blocks)
   - gaussian_mixture     : multimodality (3 modes along axis 0)
   - funnel               : state-dependent scale (Neal's funnel)
-  - double_well          : 2^d modes + non-smoothness (x^2 - |x|)
+  - double_well          : barrier + non-smoothness (beta * (x^2 - |x|))
 
 Demo-only targets (used by the examples/ scripts, not by the experiment grid):
   - exponential, lognormal : supported on the positive orthant
@@ -75,6 +75,7 @@ from targets._definitions.double_well import (
     DoubleWellDiagnostics,
     DoubleWellMALA,
     DoubleWellULA,
+    double_well_marginal,
 )
 from targets._definitions.exponential import ExponentialDiagnostics, ExponentialMALA, ExponentialULA
 from targets._definitions.funnel import (
@@ -112,7 +113,7 @@ ALL_TARGETS = TAIL_WEIGHT_TARGETS + GEOMETRIC_TARGETS
 
 def exact_samples(distribution, d, n, rng, nu=5.0, kappa=100.0,
                   V0=BANANA_V0, b=BANANA_B, centers=MIX_CENTERS,
-                  sigma_v=FUNNEL_SIGMA_V):
+                  sigma_v=FUNNEL_SIGMA_V, beta=1.0):
     """Draw `n` i.i.d. samples of dimension `d` from the named target.
 
     Every one of the eight targets admits exact sampling, which gives the
@@ -137,7 +138,7 @@ def exact_samples(distribution, d, n, rng, nu=5.0, kappa=100.0,
     if distribution == "funnel":
         return _funnel.exact_samples(d, n, rng, sigma_v=sigma_v)
     if distribution == "double_well":
-        return _double_well.exact_samples(d, n, rng)
+        return _double_well.exact_samples(d, n, rng, beta=beta)
     raise ValueError(f"Unknown distribution: {distribution}")
 
 
@@ -148,7 +149,7 @@ __all__ = [
     "BANANA_V0", "BANANA_B", "MIX_CENTERS", "FUNNEL_SIGMA_V", "QUANTILE_LEVELS",
     # helpers
     "variances_for_kappa", "mixture_cdf", "mixture_quantile", "Numerical1D",
-    "DOUBLE_WELL_MARGINAL", "exact_samples",
+    "DOUBLE_WELL_MARGINAL", "double_well_marginal", "exact_samples",
     # tail-weight family
     "GaussianULA", "GaussianMALA", "GaussianBAOAB", "GaussianDiagnostics",
     "StudentTULA", "StudentTMALA", "StudentTBAOAB", "StudentTDiagnostics",

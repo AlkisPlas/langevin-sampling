@@ -76,6 +76,14 @@ class AnisotropicGaussianDiagnostics(ComprehensiveDiagnostics):
     def theoretical_variance(self, dim):
         return float(self.variances[dim])
 
+    def b2_functions(self, dim):
+        """Functions f = x_dim**p of the b^2 metric, as (p, E[f], Var[f]).
+
+        See Hoffman & Sountsov (2022); an empty list excludes the coordinate.
+        """
+        lam = float(self.variances[dim])
+        return [(2, lam, 2.0 * lam**2)]
+
 
 def exact_samples(d, n, rng, kappa=100.0):
     std = np.sqrt(variances_for_kappa(d, kappa))

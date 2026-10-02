@@ -60,14 +60,26 @@ SPECS = [
     dict(name="gaussian_mixture", dims=[1, 3, 6], nu=None, kappa=None),
     dict(name="funnel", dims=[2, 4, 10], nu=None, kappa=None),
     dict(name="double_well", dims=[1, 3, 6], nu=None, kappa=None),
+    dict(name="double_well", dims=[1, 3, 6], nu=None, kappa=None, beta=4.0),
 ]
+
+
+def _params(spec):
+    """Constructor parameters of the target in `spec` (empty = defaults)."""
+    p = {}
+    if spec["kappa"] is not None:
+        p["kappa"] = spec["kappa"]
+    if spec.get("beta") is not None:
+        p["beta"] = spec["beta"]
+    return p
 
 
 def _cfg(algorithm, spec, d, n_steps=1):
     return ExperimentConfig(
         algorithm=algorithm, distribution=spec["name"], d=d, eta=0.05,
         gamma=1.0 if algorithm == "BAOAB" else None, nu=spec["nu"],
-        n_steps=n_steps, burn_in=0, seed=None, kappa=spec["kappa"],
+        n_steps=n_steps, burn_in=0, seed=None,
+        target_params=_params(spec),
     )
 
 
@@ -83,7 +95,8 @@ def _diagnostics(spec, d, samples):
 def _typical_points(spec, d, n, rng):
     """Points drawn from the target itself -- where gradient accuracy matters."""
     x = targets.exact_samples(spec["name"], d, n, rng, nu=spec["nu"] or 5.0,
-                              kappa=spec["kappa"] or 100.0)
+                              kappa=spec["kappa"] or 100.0,
+                              beta=spec.get("beta", 1.0))
     if spec["name"] == "double_well":
         # U = x^2 - |x| has a kink at 0; finite differences are meaningless
         # there, so push points clear of the non-differentiable point.
@@ -103,7 +116,7 @@ def _mvt_logpdf(x, nu, d):
             - ((nu + d) / 2.0) * np.log1p(q / nu))
 
 
-def _reference_logpdf(name, x, nu=None, kappa=None):
+def _reference_logpdf(name, x, nu=None, kappa=None, beta=1.0):
     d = x.shape[0]
     if name == "gaussian":
         return float(np.sum(norm.logpdf(x)))
@@ -139,7 +152,7 @@ def _reference_logpdf(name, x, nu=None, kappa=None):
         lp += np.sum(norm.logpdf(x[1:], loc=0.0, scale=np.exp(v / 2.0)))
         return float(lp)
     if name == "double_well":
-        return float(-np.sum(x**2 - np.abs(x)))
+        return float(-beta * np.sum(x**2 - np.abs(x)))
     raise ValueError(name)
 
 
@@ -160,7 +173,8 @@ def test_potential_matches_reference_logpdf():
             xs = _typical_points(spec, d, 40, rng)
             offs = np.array([
                 s.f(x) + _reference_logpdf(spec["name"], x.copy(),
-                                           nu=spec["nu"], kappa=spec["kappa"])
+                                           nu=spec["nu"], kappa=spec["kappa"],
+                                           beta=spec.get("beta", 1.0))
                 for x in xs
             ])
             spread = float(np.max(offs) - np.min(offs))
@@ -226,6 +240,61 @@ _MOMENT_SKIP = {
 }
 
 
+def _b2_specs():
+    """Specs whose diagnostics declare b^2 functions (the geometric targets)."""
+    out = []
+    for spec in SPECS:
+        d = spec["dims"][-1]
+        diag = _diagnostics(spec, d, np.zeros((4, d)))
+        if callable(getattr(diag, "b2_functions", None)):
+            out.append((spec, d, diag))
+    return out
+
+
+def test_b2_functions_match_exact_samples():
+    """E[f] and Var[f] declared for b^2 must match i.i.d. exact samples.
+
+    This checks the fourth moments (Var[x^2]) independently of any chain.
+    """
+    rng = np.random.default_rng(SEED)
+    n = 400_000
+    failures = []
+    for spec, d, diag in _b2_specs():
+        x = targets.exact_samples(spec["name"], d, n, rng, nu=spec["nu"] or 5.0,
+                                  kappa=spec["kappa"] or 100.0,
+                                  beta=spec.get("beta", 1.0))
+        for k in range(d):
+            for p, e, v in diag.b2_functions(k):
+                fx = x[:, k] ** p
+                if abs(fx.mean() - e) > 6.0 * np.sqrt(v / n):
+                    failures.append(f"{spec['name']} dim {k} x^{p}: mean {fx.mean():.5g} vs {e:.5g}")
+                # The sample variance of x^2 depends on the 8th moment, which is very
+                # heavy-tailed for the bent banana coordinates: at n = 4e5 its noise
+                # is ~5 %. The formula itself was checked to 0.05 % with n = 4e6.
+                if abs(fx.var() - v) / v > 0.10:
+                    failures.append(f"{spec['name']} dim {k} x^{p}: var {fx.var():.5g} vs {v:.5g}")
+    assert not failures, "\n".join(failures)
+
+
+def test_b2_is_one_over_n_for_exact_samples():
+    """For n i.i.d. exact samples the expected b^2 is 1/n (the metric's meaning)."""
+    rng = np.random.default_rng(SEED)
+    n, reps = 100, 2000
+    failures = []
+    for spec, d, diag in _b2_specs():
+        fns = [(k, p, e, v) for k in range(d) for p, e, v in diag.b2_functions(k)]
+        vals = []
+        for _ in range(reps):
+            x = targets.exact_samples(spec["name"], d, n, rng, nu=spec["nu"] or 5.0,
+                                      kappa=spec["kappa"] or 100.0,
+                                      beta=spec.get("beta", 1.0))
+            vals.append(np.mean([(np.mean(x[:, k] ** p) - e) ** 2 / v for k, p, e, v in fns]))
+        got = float(np.mean(vals)) * n
+        if abs(got - 1.0) > 0.20:
+            failures.append(f"{spec['name']} d={d} beta={spec.get('beta', 1.0)}: n * E[b^2] = {got:.3f}")
+    assert not failures, "\n".join(failures)
+
+
 def test_exact_samples_match_theoretical_moments():
     """Exact i.i.d. draws must reproduce the declared theoretical mean/variance.
 
@@ -242,7 +311,8 @@ def test_exact_samples_match_theoretical_moments():
             continue
         for d in spec["dims"]:
             x = targets.exact_samples(name, d, n, rng, nu=spec["nu"] or 5.0,
-                                      kappa=spec["kappa"] or 100.0)
+                                      kappa=spec["kappa"] or 100.0,
+                              beta=spec.get("beta", 1.0))
             diag = _diagnostics(spec, d, x)
             emp_mean = x.mean(axis=0)
             emp_var = x.var(axis=0)
@@ -278,7 +348,8 @@ def test_exact_samples_match_declared_cdf():
         name = spec["name"]
         for d in spec["dims"]:
             x = targets.exact_samples(name, d, n, rng, nu=spec["nu"] or 5.0,
-                                      kappa=spec["kappa"] or 100.0)
+                                      kappa=spec["kappa"] or 100.0,
+                              beta=spec.get("beta", 1.0))
             diag = _diagnostics(spec, d, x)
             for k in range(d):
                 probe = diag.cdf(np.array([0.0, 1.0]), k)
@@ -299,7 +370,8 @@ def test_cdf_quantile_roundtrip():
     for spec in SPECS:
         for d in spec["dims"]:
             x = targets.exact_samples(spec["name"], d, 64, rng, nu=spec["nu"] or 5.0,
-                                      kappa=spec["kappa"] or 100.0)
+                                      kappa=spec["kappa"] or 100.0,
+                              beta=spec.get("beta", 1.0))
             diag = _diagnostics(spec, d, x)
             for k in range(d):
                 for p in ps:
@@ -323,22 +395,27 @@ def test_double_well_marginal_by_independent_quadrature():
     targets.Numerical1D builds the marginal on a fixed trapezoidal grid; here we
     recompute the same normalising constant, mean and variance with scipy's
     adaptive quadrature, so a grid that is too coarse or too narrow is caught.
+    Checked for every barrier factor beta used in the calibration study.
     """
-    dens = lambda t: np.exp(-(t**2 - np.abs(t)))
-    Z = quad(dens, -np.inf, np.inf)[0]
-    m1 = quad(lambda t: t * dens(t), -np.inf, np.inf)[0] / Z
-    m2 = quad(lambda t: t * t * dens(t), -np.inf, np.inf)[0] / Z
-    var = m2 - m1**2
+    for beta in (1.0, 4.0, 8.0):
+        dens = lambda t, b=beta: np.exp(-b * (t**2 - np.abs(t)))
+        Z = quad(dens, -np.inf, np.inf)[0]
+        m1 = quad(lambda t: t * dens(t), -np.inf, np.inf)[0] / Z
+        m2 = quad(lambda t: t * t * dens(t), -np.inf, np.inf)[0] / Z
+        var = m2 - m1**2
 
-    grid = targets.DOUBLE_WELL_MARGINAL
-    assert abs(grid.mean - m1) < 1e-8, f"mean {grid.mean} vs quad {m1}"
-    assert abs(grid.var - var) / var < 1e-6, f"var {grid.var} vs quad {var}"
+        grid = targets.double_well_marginal(beta)
+        assert abs(grid.mean - m1) < 1e-8, f"beta={beta}: mean {grid.mean} vs quad {m1}"
+        assert abs(grid.var - var) / var < 1e-6, f"beta={beta}: var {grid.var} vs quad {var}"
 
-    # And the CDF at a few points, against quadrature of the same density.
-    for t in (-1.5, -0.5, 0.0, 0.5, 1.5):
-        ref = quad(dens, -np.inf, t)[0] / Z
-        got = float(grid.cdf(t))
-        assert abs(got - ref) < 1e-6, f"cdf({t}) = {got} vs quad {ref}"
+        # And the CDF at a few points, against quadrature of the same density.
+        for t in (-1.5, -0.5, 0.0, 0.5, 1.5):
+            ref = quad(dens, -np.inf, t)[0] / Z
+            got = float(grid.cdf(t))
+            assert abs(got - ref) < 1e-6, f"beta={beta}: cdf({t}) = {got} vs quad {ref}"
+
+    # The beta = 1 marginal is the shared module constant.
+    assert targets.DOUBLE_WELL_MARGINAL.var == targets.double_well_marginal(1.0).var
 
 
 def test_demo_only_targets():

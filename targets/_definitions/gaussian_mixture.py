@@ -118,6 +118,24 @@ class GaussianMixtureDiagnostics(ComprehensiveDiagnostics):
             return 1.0 + between
         return 1.0
 
+    def b2_group(self, dim):
+        """Group of the coordinate for b2_grouped: coordinates with the same
+        distribution share a group (see experiments/run_experiments.py)."""
+        return 0 if dim == 0 else 1            # 0 = mode coordinate, 1 = unit normals
+
+    def b2_functions(self, dim):
+        """Functions f = x_dim**p of the b^2 metric, as (p, E[f], Var[f]).
+
+        See Hoffman & Sountsov (2022); an empty list excludes the coordinate.
+        """
+        if dim != 0:                           # unit normal
+            return [(1, 0.0, 1.0), (2, 1.0, 2.0)]
+        c = self.centers                       # x = c + z, c uniform over centers
+        mean = float(np.mean(c))
+        m2 = 1.0 + float(np.mean(c**2))
+        m4 = float(np.mean(c**4)) + 6.0 * float(np.mean(c**2)) + 3.0
+        return [(1, mean, m2 - mean**2), (2, m2, m4 - m2**2)]
+
     def mode_occupancy(self):
         """Occupancy error and transition rate based on the axis-0 mode label."""
         x0 = self.samples[:, 0]

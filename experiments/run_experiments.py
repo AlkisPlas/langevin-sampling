@@ -24,7 +24,7 @@ import itertools
 import os
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -56,14 +56,18 @@ class ExperimentConfig:
     n_steps: int
     burn_in: int
     seed: int
-    kappa: float | None = None  # only for anisotropic_gaussian (condition number)
+    # Constructor parameters of the target, e.g. {"b": 0.03}; empty = target defaults.
+    target_params: dict = field(default_factory=dict)
+
+    def params_label(self) -> str:
+        return ",".join(f"{k}={v}" for k, v in self.target_params.items())
 
     def label(self) -> str:
         bits = [self.algorithm, self.distribution, f"d={self.d}", f"eta={self.eta}"]
         if self.gamma is not None:
             bits.append(f"gamma={self.gamma}")
-        if self.kappa is not None:
-            bits.append(f"kappa={self.kappa}")
+        if self.target_params:
+            bits.append(self.params_label())
         if self.nu is not None:
             bits.append(f"nu={self.nu}")
         bits.append(f"seed={self.seed}")
@@ -72,9 +76,13 @@ class ExperimentConfig:
 
 DISPERSION = 4.0  # over-dispersion factor for x0 initialisation
 
+# The per_dim sheet is written only for d <= PER_DIM_MAX_D: no analysis reads it,
+# and for d > 100 it would exceed the Excel row limit (plan §6, decision 12).
+PER_DIM_MAX_D = 100
+
 
 def sample_initial_state(distribution: str, d: int, seed: int,
-                         dispersion: float = DISPERSION, kappa: float | None = None):
+                         dispersion: float = DISPERSION, params: dict | None = None):
     """
     Draw an over-dispersed initial position x0 (and equilibrium momentum v0
     for the kinetic scheme) using an independent RNG stream so that x0
@@ -85,7 +93,11 @@ def sample_initial_state(distribution: str, d: int, seed: int,
     - Student-t(nu=5): x0 ~ 2 * t_5         (heavier than target)
     - Cauchy: x0 ~ dispersion * Cauchy(0,1) (heavier than target)
     - v0 ~ N(0, I)                          (equilibrium momentum)
+
+    `params` are the target's constructor parameters (see ExperimentConfig);
+    missing entries fall back to the target defaults.
     """
+    params = params or {}
     rng = np.random.default_rng(seed)
     if distribution == "gaussian":
         x0 = rng.normal(0.0, np.sqrt(dispersion), d)
@@ -94,13 +106,14 @@ def sample_initial_state(distribution: str, d: int, seed: int,
     elif distribution == "cauchy":
         x0 = rng.standard_cauchy(d) * dispersion
     elif distribution == "anisotropic_gaussian":
-        variances = targets.variances_for_kappa(d, kappa if kappa is not None else 100.0)
+        variances = targets.variances_for_kappa(d, params.get("kappa", 100.0))
         x0 = rng.normal(0.0, 1.0, d) * np.sqrt(dispersion * variances)
     elif distribution == "banana":
         # Over-dispersed draw in the underlying y-space, then map onto the banana.
         if d % 2 != 0:
             raise ValueError("banana requires even d (product of 2D blocks)")
-        V0, b = targets.BANANA_V0, targets.BANANA_B
+        V0 = params.get("V0", targets.BANANA_V0)
+        b = params.get("b", targets.BANANA_B)
         y = rng.normal(0.0, 1.0, d)
         y[0::2] *= np.sqrt(dispersion * V0)
         y[1::2] *= np.sqrt(dispersion)
@@ -108,12 +121,12 @@ def sample_initial_state(distribution: str, d: int, seed: int,
         x0[1::2] = y[1::2] + b * (y[0::2] ** 2 - V0)
     elif distribution == "gaussian_mixture":
         # Start inside a randomly chosen mode (exposes mode-trapping).
-        centers = targets.MIX_CENTERS
+        centers = params.get("centers", targets.MIX_CENTERS)
         x0 = rng.normal(0.0, np.sqrt(dispersion), d)
         x0[0] += centers[rng.integers(len(centers))]
     elif distribution == "funnel":
         # Exact hierarchical draw: v ~ N(0, sigma_v^2), x_i ~ N(0, e^v).
-        sv = targets.FUNNEL_SIGMA_V
+        sv = params.get("sigma_v", targets.FUNNEL_SIGMA_V)
         v = rng.normal(0.0, sv)
         x0 = rng.normal(0.0, np.exp(v / 2.0), d)
         x0[0] = v
@@ -126,45 +139,45 @@ def sample_initial_state(distribution: str, d: int, seed: int,
 
 
 def build_sampler(cfg: ExperimentConfig):
-    x0, v0 = sample_initial_state(cfg.distribution, cfg.d, cfg.seed, kappa=cfg.kappa)
+    p = cfg.target_params
+    x0, v0 = sample_initial_state(cfg.distribution, cfg.d, cfg.seed, params=p)
     common = dict(d=cfg.d, eta=cfg.eta, n_steps=cfg.n_steps, burn_in=cfg.burn_in,
                   x0=x0, seed=cfg.seed)
-    kappa = cfg.kappa if cfg.kappa is not None else 100.0
     if cfg.distribution == "anisotropic_gaussian":
         if cfg.algorithm == "ULA":
-            return targets.AnisotropicGaussianULA(kappa=kappa, **common)
+            return targets.AnisotropicGaussianULA(**p, **common)
         if cfg.algorithm == "MALA":
-            return targets.AnisotropicGaussianMALA(kappa=kappa, **common)
+            return targets.AnisotropicGaussianMALA(**p, **common)
         if cfg.algorithm == "BAOAB":
-            return targets.AnisotropicGaussianBAOAB(kappa=kappa, gamma=cfg.gamma, v0=v0, **common)
+            return targets.AnisotropicGaussianBAOAB(gamma=cfg.gamma, v0=v0, **p, **common)
     if cfg.distribution == "banana":
         if cfg.algorithm == "ULA":
-            return targets.BananaULA(**common)
+            return targets.BananaULA(**p, **common)
         if cfg.algorithm == "MALA":
-            return targets.BananaMALA(**common)
+            return targets.BananaMALA(**p, **common)
         if cfg.algorithm == "BAOAB":
-            return targets.BananaBAOAB(gamma=cfg.gamma, v0=v0, **common)
+            return targets.BananaBAOAB(gamma=cfg.gamma, v0=v0, **p, **common)
     if cfg.distribution == "gaussian_mixture":
         if cfg.algorithm == "ULA":
-            return targets.GaussianMixtureULA(**common)
+            return targets.GaussianMixtureULA(**p, **common)
         if cfg.algorithm == "MALA":
-            return targets.GaussianMixtureMALA(**common)
+            return targets.GaussianMixtureMALA(**p, **common)
         if cfg.algorithm == "BAOAB":
-            return targets.GaussianMixtureBAOAB(gamma=cfg.gamma, v0=v0, **common)
+            return targets.GaussianMixtureBAOAB(gamma=cfg.gamma, v0=v0, **p, **common)
     if cfg.distribution == "funnel":
         if cfg.algorithm == "ULA":
-            return targets.FunnelULA(**common)
+            return targets.FunnelULA(**p, **common)
         if cfg.algorithm == "MALA":
-            return targets.FunnelMALA(**common)
+            return targets.FunnelMALA(**p, **common)
         if cfg.algorithm == "BAOAB":
-            return targets.FunnelBAOAB(gamma=cfg.gamma, v0=v0, **common)
+            return targets.FunnelBAOAB(gamma=cfg.gamma, v0=v0, **p, **common)
     if cfg.distribution == "double_well":
         if cfg.algorithm == "ULA":
-            return targets.DoubleWellULA(**common)
+            return targets.DoubleWellULA(**p, **common)
         if cfg.algorithm == "MALA":
-            return targets.DoubleWellMALA(**common)
+            return targets.DoubleWellMALA(**p, **common)
         if cfg.algorithm == "BAOAB":
-            return targets.DoubleWellBAOAB(gamma=cfg.gamma, v0=v0, **common)
+            return targets.DoubleWellBAOAB(gamma=cfg.gamma, v0=v0, **p, **common)
     if cfg.distribution == "gaussian":
         if cfg.algorithm == "ULA":
             return targets.GaussianULA(**common)
@@ -191,17 +204,17 @@ def build_sampler(cfg: ExperimentConfig):
 
 def build_diagnostics(cfg: ExperimentConfig, sampler, samples_post):
     acc = getattr(sampler, "acceptance_rate", None) if cfg.algorithm == "MALA" else None
+    p = cfg.target_params
     if cfg.distribution == "anisotropic_gaussian":
-        kappa = cfg.kappa if cfg.kappa is not None else 100.0
-        return targets.AnisotropicGaussianDiagnostics(samples_post, kappa=kappa, acceptance_rate=acc)
+        return targets.AnisotropicGaussianDiagnostics(samples_post, acceptance_rate=acc, **p)
     if cfg.distribution == "banana":
-        return targets.BananaDiagnostics(samples_post, acceptance_rate=acc)
+        return targets.BananaDiagnostics(samples_post, acceptance_rate=acc, **p)
     if cfg.distribution == "gaussian_mixture":
-        return targets.GaussianMixtureDiagnostics(samples_post, acceptance_rate=acc)
+        return targets.GaussianMixtureDiagnostics(samples_post, acceptance_rate=acc, **p)
     if cfg.distribution == "funnel":
-        return targets.FunnelDiagnostics(samples_post, acceptance_rate=acc)
+        return targets.FunnelDiagnostics(samples_post, acceptance_rate=acc, **p)
     if cfg.distribution == "double_well":
-        return targets.DoubleWellDiagnostics(samples_post, acceptance_rate=acc)
+        return targets.DoubleWellDiagnostics(samples_post, acceptance_rate=acc, **p)
     if cfg.distribution == "gaussian":
         return targets.GaussianDiagnostics(samples_post, mu=np.zeros(cfg.d), Sigma=np.eye(cfg.d),
                                    acceptance_rate=acc)
@@ -220,9 +233,11 @@ def build_diagnostics(cfg: ExperimentConfig, sampler, samples_post):
 
 
 def _safe_mean_abs_bias(emp: np.ndarray, theor: np.ndarray) -> float:
-    if np.any(np.isnan(theor)):
+    """Mean |emp - theor| over the dimensions with a theoretical value."""
+    ok = ~np.isnan(theor)
+    if not np.any(ok):
         return float("nan")
-    return float(np.mean(np.abs(emp - theor)))
+    return float(np.mean(np.abs(emp[ok] - theor[ok])))
 
 
 def extract_metrics(cfg: ExperimentConfig, diagnostics, runtime: float):
@@ -255,12 +270,14 @@ def extract_metrics(cfg: ExperimentConfig, diagnostics, runtime: float):
 
     qmae_per_level: dict[float, float] = {}
     for q_level in diagnostics.quantile_levels:
+        # Only the dimensions with a closed-form marginal.
         theor_qs = np.array([diagnostics.quantile(q_level, dim=k) for k in range(d)])
-        if np.any(np.isnan(theor_qs)):
+        ok = ~np.isnan(theor_qs)
+        if not np.any(ok):
             qmae_per_level[q_level] = float("nan")
         else:
             emp_qs = np.array([np.percentile(samples[:, k], q_level * 100) for k in range(d)])
-            qmae_per_level[q_level] = float(np.mean(np.abs(emp_qs - theor_qs)))
+            qmae_per_level[q_level] = float(np.mean(np.abs(emp_qs[ok] - theor_qs[ok])))
 
     tail_summary: dict[float, float] = {}
     tail_stats = diagnostics.compute_tail_coverage()
@@ -270,6 +287,8 @@ def extract_metrics(cfg: ExperimentConfig, diagnostics, runtime: float):
         else:
             ratios = []
             for k in range(d):
+                if f"dim_{k}" not in tail_stats:   # no closed-form marginal
+                    continue
                 entry = tail_stats[f"dim_{k}"][f"q_{q}"]
                 ratios.append(entry["coverage"] / entry["expected"])
             tail_summary[q] = float(np.mean(ratios))
@@ -292,6 +311,28 @@ def extract_metrics(cfg: ExperimentConfig, diagnostics, runtime: float):
         ks_per_dim.append(stat)
     ks_mean = float(np.nanmean(ks_per_dim)) if len(ks_per_dim) else float("nan")
 
+    # b^2 (Hoffman & Sountsov 2022): (E_chain[f] - E[f])^2 / Var[f] for the
+    # functions f = x_k**p that the target declares; NaN if it declares none.
+    # b2_grouped: the mean within each group of identically distributed
+    # coordinates (target method b2_group; one group by default), then the
+    # maximum over the groups. It does not dilute a difficult group with easy
+    # ones, and it does not grow with d (the number of groups is fixed).
+    b2_fn = getattr(diagnostics, "b2_functions", None)
+    group_fn = getattr(diagnostics, "b2_group", lambda k: 0)
+    b2_per_dim = np.full(d, np.nan)
+    b2_terms: list[float] = []
+    b2_by_group: dict = {}
+    if callable(b2_fn):
+        for k in range(d):
+            terms = [(float(np.mean(samples[:, k] ** p)) - e) ** 2 / v for p, e, v in b2_fn(k)]
+            if terms:
+                b2_per_dim[k] = float(np.mean(terms))
+                b2_terms.extend(terms)
+                b2_by_group.setdefault(group_fn(k), []).extend(terms)
+    b2_avg = float(np.mean(b2_terms)) if b2_terms else float("nan")
+    b2_grouped = (float(max(np.mean(t) for t in b2_by_group.values()))
+                  if b2_by_group else float("nan"))
+
     # Mode-occupancy (only for multimodal targets that expose it).
     mode_fn = getattr(diagnostics, "mode_occupancy", None)
     if callable(mode_fn):
@@ -308,7 +349,7 @@ def extract_metrics(cfg: ExperimentConfig, diagnostics, runtime: float):
         "d": cfg.d,
         "eta": cfg.eta,
         "gamma": cfg.gamma if cfg.gamma is not None else float("nan"),
-        "kappa": cfg.kappa if cfg.kappa is not None else float("nan"),
+        "target_params": cfg.params_label(),
         "nu": cfg.nu if cfg.nu is not None else float("nan"),
         "n_steps": cfg.n_steps,
         "burn_in": cfg.burn_in,
@@ -350,6 +391,8 @@ def extract_metrics(cfg: ExperimentConfig, diagnostics, runtime: float):
         "ks_stat_mean": ks_mean,
         "mode_occupancy_error": mode_occ_err,
         "mode_transition_rate": mode_trans,
+        "b2_avg": b2_avg,
+        "b2_grouped": b2_grouped,
     }
 
     per_dim_rows: list[dict[str, Any]] = []
@@ -360,6 +403,7 @@ def extract_metrics(cfg: ExperimentConfig, diagnostics, runtime: float):
             "d": cfg.d,
             "eta": cfg.eta,
             "gamma": cfg.gamma if cfg.gamma is not None else float("nan"),
+            "target_params": cfg.params_label(),
             "nu": cfg.nu if cfg.nu is not None else float("nan"),
             "seed": cfg.seed,
             "dim": k,
@@ -374,6 +418,7 @@ def extract_metrics(cfg: ExperimentConfig, diagnostics, runtime: float):
             "empirical_median": float(emp_median[k]),
             "theoretical_median": float(theor_median[k]) if not np.isnan(theor_median[k]) else float("nan"),
             "ks_stat": float(ks_per_dim[k]),
+            "b2": float(b2_per_dim[k]),
         })
 
     return summary_row, per_dim_rows
@@ -510,7 +555,7 @@ PRESETS = {
     },
     # ----- Extended geometric targets (anisotropic / banana / mixture / funnel /
     # double-well). d_values are EVEN because the banana is a product of 2D blocks.
-    # kappa_values is swept only for the anisotropic Gaussian.
+    # target_params: constructor parameters per target, one run per entry.
     "extended_smoke": {
         "algorithms": ["ULA", "MALA", "BAOAB"],
         "distributions": ["anisotropic_gaussian", "banana", "gaussian_mixture",
@@ -525,7 +570,7 @@ PRESETS = {
                        "gaussian_mixture": [0.2], "funnel": [0.05], "double_well": [0.2]},
         },
         "gamma_values": [1.0],
-        "kappa_values": [100.0],
+        "target_params": {"anisotropic_gaussian": [{"kappa": 100.0}]},
         "n_steps": 5_000,
         "burn_in": 500,
         "nu": 5.0,
@@ -556,7 +601,243 @@ PRESETS = {
                        "double_well": [0.1, 0.3, 0.5]},
         },
         "gamma_values": [0.5, 1.0, 2.0],
-        "kappa_values": [10.0, 100.0, 1000.0],
+        "target_params": {"anisotropic_gaussian": [{"kappa": 10.0}, {"kappa": 100.0},
+                                                   {"kappa": 1000.0}]},
+        "n_steps": 50_000,
+        "burn_in": 5_000,
+        "nu": 5.0,
+        "seeds": list(range(20)),
+    },
+    # ----- Calibration study (thesis/experiment_design_extension.md, §4): three
+    # candidate values of the difficulty parameter per target, at d = 10. The eta
+    # grids extend the `extended` grids upwards (best eta was at the top edge there)
+    # and, where a candidate value is harder, downwards. They were extended once more
+    # after the short check of step 7 (best eta at an edge; see §4.8 of the plan).
+    "calibration": {
+        "algorithms": ["ULA", "MALA", "BAOAB"],
+        "distributions": ["anisotropic_gaussian", "banana", "gaussian_mixture",
+                          "funnel", "double_well"],
+        "d_values": [10],
+        "eta": {
+            "ULA":   {"anisotropic_gaussian": [0.03, 0.05, 0.1, 0.3, 0.5, 1.0, 1.5],
+                       "banana": [0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 1.5],
+                       "gaussian_mixture": [0.05, 0.1, 0.3, 0.5, 1.0],
+                       "funnel": [0.005, 0.01, 0.02, 0.05, 0.1, 0.2],
+                       "double_well": [0.003, 0.005, 0.01, 0.03, 0.05, 0.1, 0.3, 0.5]},
+            "MALA":  {"anisotropic_gaussian": [0.3, 0.7, 1.0, 2.0, 3.0],
+                       "banana": [0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0],
+                       "gaussian_mixture": [0.1, 0.2, 0.3, 0.5, 1.0, 1.5],
+                       "funnel": [0.02, 0.05, 0.1, 0.2, 0.5, 1.0],
+                       "double_well": [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0]},
+            "BAOAB": {"anisotropic_gaussian": [0.3, 0.7, 1.0, 1.5, 1.8, 1.9],
+                       "banana": [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0],
+                       "gaussian_mixture": [0.1, 0.3, 0.5, 1.0, 1.5, 2.0, 3.0],
+                       "funnel": [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0],
+                       "double_well": [0.03, 0.05, 0.1, 0.3, 0.5, 0.7, 1.0]},
+        },
+        "gamma_values": [0.5, 1.0, 2.0],
+        "target_params": {
+            "anisotropic_gaussian": [{"kappa": 10.0}, {"kappa": 100.0}, {"kappa": 1000.0}],
+            "banana":               [{"b": 0.01}, {"b": 0.03}, {"b": 0.1}],
+            "gaussian_mixture":     [{"centers": (-4.0, 0.0, 4.0)},
+                                     {"centers": (-6.0, 0.0, 6.0)},
+                                     {"centers": (-8.0, 0.0, 8.0)}],
+            "funnel":               [{"sigma_v": 1.0}, {"sigma_v": 2.0}, {"sigma_v": 3.0}],
+            "double_well":          [{"beta": 1.0}, {"beta": 4.0}, {"beta": 8.0}],
+        },
+        "n_steps": 50_000,
+        "burn_in": 5_000,
+        "nu": 5.0,
+        "seeds": list(range(20)),
+    },
+    # ----- Dimensional scaling, Part B, stage 1 (plan §10, E3): the five geometric
+    # targets at their calibrated difficulty (plan §4.8, step 8, table T2), for
+    # d <= 100. The eta grids are the calibration grids (checked for edges at d = 10);
+    # for the double well (beta = 16) they are the `calibration_extra` grids.
+    "scaling_B1": {
+        "algorithms": ["ULA", "MALA", "BAOAB"],
+        "distributions": ["anisotropic_gaussian", "banana", "gaussian_mixture",
+                          "funnel", "double_well"],
+        "d_values": [2, 4, 10, 20, 50, 100],
+        "eta": {
+            "ULA":   {"anisotropic_gaussian": [0.03, 0.05, 0.1, 0.3, 0.5, 1.0, 1.5],
+                       "banana": [0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 1.5],
+                       "gaussian_mixture": [0.05, 0.1, 0.3, 0.5, 1.0],
+                       "funnel": [0.005, 0.01, 0.02, 0.05, 0.1, 0.2],
+                       "double_well": [0.0005, 0.001, 0.002, 0.003, 0.005, 0.01, 0.03, 0.05]},
+            "MALA":  {"anisotropic_gaussian": [0.3, 0.7, 1.0, 2.0, 3.0],
+                       "banana": [0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0],
+                       "gaussian_mixture": [0.1, 0.2, 0.3, 0.5, 1.0, 1.5],
+                       "funnel": [0.02, 0.05, 0.1, 0.2, 0.5, 1.0],
+                       "double_well": [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1]},
+            "BAOAB": {"anisotropic_gaussian": [0.3, 0.7, 1.0, 1.5, 1.8, 1.9],
+                       "banana": [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0],
+                       "gaussian_mixture": [0.1, 0.3, 0.5, 1.0, 1.5, 2.0, 3.0],
+                       "funnel": [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0],
+                       "double_well": [0.005, 0.01, 0.02, 0.03, 0.05, 0.1, 0.3]},
+        },
+        "gamma_values": [0.5, 1.0, 2.0],
+        "target_params": {
+            "anisotropic_gaussian": [{"kappa": 1000.0}],
+            "banana":               [{"b": 0.03}],
+            "gaussian_mixture":     [{"centers": (-6.0, 0.0, 6.0)}],
+            "funnel":               [{"sigma_v": 2.0}],
+            "double_well":          [{"beta": 16.0}],
+        },
+        "n_steps": 50_000,
+        "burn_in": 5_000,
+        "nu": 5.0,
+        "seeds": list(range(20)),
+    },
+    # ----- Additional eta values for `scaling_B1` (plan §4.8, step 9): the best eta
+    # was at a grid edge for these (target, algorithm) pairs. Same settings otherwise.
+    "scaling_B1_extra": {
+        "algorithms": ["ULA", "MALA"],
+        "distributions": ["anisotropic_gaussian", "banana", "funnel"],
+        "d_values": [2, 4, 10, 20, 50, 100],
+        "eta": {
+            "ULA":  {"anisotropic_gaussian": [], "banana": [], "funnel": [0.001, 0.002]},
+            "MALA": {"anisotropic_gaussian": [4.0, 5.0], "banana": [3.0, 5.0],
+                      "funnel": [0.005, 0.01]},
+        },
+        "gamma_values": [0.5, 1.0, 2.0],
+        "target_params": {
+            "anisotropic_gaussian": [{"kappa": 1000.0}],
+            "banana":               [{"b": 0.03}],
+            "funnel":               [{"sigma_v": 2.0}],
+        },
+        "n_steps": 50_000,
+        "burn_in": 5_000,
+        "nu": 5.0,
+        "seeds": list(range(20)),
+    },
+    # ----- Dimensional scaling, Part B, stage 2 (plan §4.8, step 9): d in {200, 500,
+    # 1000}. Grids = best eta at d = 100 of stage 1 x {0.25, 0.5, 1, 1.5}, plus x0.125
+    # where the best eta decreased from d = 50 to d = 100.
+    "scaling_B2": {
+        "algorithms": ["ULA", "MALA", "BAOAB"],
+        "distributions": ["anisotropic_gaussian", "banana", "gaussian_mixture",
+                          "funnel", "double_well"],
+        "d_values": [200, 500, 1000],
+        "eta": {
+            "ULA":   {"anisotropic_gaussian": [0.12, 0.25, 0.5, 0.75],
+                       "banana": [0.12, 0.25, 0.5, 0.75],
+                       "gaussian_mixture": [0.075, 0.15, 0.3, 0.45],
+                       "funnel": [0.0006, 0.0013, 0.0025, 0.005, 0.0075],
+                       "double_well": [0.0025, 0.005, 0.01, 0.015]},
+            "MALA":  {"anisotropic_gaussian": [0.09, 0.17, 0.35, 0.7, 1.0],
+                       "banana": [0.05, 0.1, 0.2, 0.3],
+                       "gaussian_mixture": [0.04, 0.075, 0.15, 0.3, 0.45],
+                       "funnel": [0.0013, 0.0025, 0.005, 0.01, 0.015],
+                       "double_well": [0.0006, 0.0013, 0.0025, 0.005, 0.0075]},
+            "BAOAB": {"anisotropic_gaussian": [1.0, 1.5, 1.8, 1.9],
+                       "banana": [0.06, 0.12, 0.25, 0.5, 0.75],
+                       "gaussian_mixture": [0.25, 0.5, 1.0, 1.5],
+                       "funnel": [0.025, 0.05, 0.1, 0.15],
+                       "double_well": [0.025, 0.05, 0.1, 0.15]},
+        },
+        "gamma_values": [0.5, 1.0, 2.0],
+        "target_params": {
+            "anisotropic_gaussian": [{"kappa": 1000.0}],
+            "banana":               [{"b": 0.03}],
+            "gaussian_mixture":     [{"centers": (-6.0, 0.0, 6.0)}],
+            "funnel":               [{"sigma_v": 2.0}],
+            "double_well":          [{"beta": 16.0}],
+        },
+        "n_steps": 50_000,
+        "burn_in": 5_000,
+        "nu": 5.0,
+        "seeds": list(range(20)),
+    },
+    # ----- Dimensional scaling, Part A, d in {200, 500, 1000} (plan §6, decision 12).
+    # The eta grids extend past the d = 100 optima of `high_d_only`, which were at a
+    # grid edge in six of nine cases (Εργασία §4.6, item 3); BAOAB on the Gaussian
+    # stops below its stability limit eta = 2. gamma as in the original thesis.
+    "scaling_A_high": {
+        "algorithms": ["ULA", "MALA", "BAOAB"],
+        "distributions": ["gaussian", "student_t", "cauchy"],
+        "d_values": [200, 500, 1000],
+        "eta": {
+            "ULA":   {"gaussian":  [0.03, 0.05, 0.1, 0.2, 0.3],
+                       "student_t": [0.002, 0.005, 0.01, 0.02, 0.03],
+                       "cauchy":    [0.2, 0.5, 1.0, 2.0]},
+            "MALA":  {"gaussian":  [0.1, 0.15, 0.2, 0.3, 0.5],
+                       "student_t": [0.05, 0.1, 0.15, 0.3],
+                       "cauchy":    [1.0, 2.0, 4.0, 8.0]},
+            "BAOAB": {"gaussian":  [1.0, 1.5, 1.8, 1.9],
+                       "student_t": [0.6, 1.0, 1.5, 2.0],
+                       "cauchy":    [0.5, 1.0, 2.0, 4.0]},
+        },
+        "gamma_values": [0.5, 1.0, 2.0, 5.0],
+        "n_steps": 50_000,
+        "burn_in": 5_000,
+        "nu": 5.0,
+        "seeds": list(range(20)),
+    },
+    # ----- Additional eta values for `scaling_B2` and `scaling_A_high` (plan §4.8,
+    # step 9b): the best eta was at a grid edge for these (target, algorithm) pairs,
+    # after the divergence fix. Same settings as the base presets otherwise.
+    "scaling_B2_extra": {
+        "algorithms": ["ULA", "MALA", "BAOAB"],
+        "distributions": ["banana", "gaussian_mixture", "funnel", "double_well"],
+        "d_values": [200, 500, 1000],
+        "eta": {
+            "ULA":   {"banana": [0.03, 0.06], "gaussian_mixture": [],
+                       "funnel": [0.01, 0.015], "double_well": [0.02, 0.03]},
+            "MALA":  {"banana": [0.0125, 0.025], "gaussian_mixture": [0.01, 0.02],
+                       "funnel": [0.0003, 0.0006, 0.02, 0.03], "double_well": []},
+            "BAOAB": {"banana": [], "gaussian_mixture": [2.0, 3.0],
+                       "funnel": [0.006, 0.0125], "double_well": [0.2, 0.3]},
+        },
+        "gamma_values": [0.5, 1.0, 2.0],
+        "target_params": {
+            "banana":           [{"b": 0.03}],
+            "gaussian_mixture": [{"centers": (-6.0, 0.0, 6.0)}],
+            "funnel":           [{"sigma_v": 2.0}],
+            "double_well":      [{"beta": 16.0}],
+        },
+        "n_steps": 50_000,
+        "burn_in": 5_000,
+        "nu": 5.0,
+        "seeds": list(range(20)),
+    },
+    "scaling_A_high_extra": {
+        "algorithms": ["ULA", "MALA", "BAOAB"],
+        "distributions": ["gaussian", "student_t", "cauchy"],
+        "d_values": [200, 500, 1000],
+        "eta": {
+            "ULA":   {"gaussian": [], "student_t": [0.05, 0.1], "cauchy": [4.0, 8.0]},
+            "MALA":  {"gaussian": [0.05, 0.07], "student_t": [],
+                       "cauchy": [0.1, 0.3, 0.5, 16.0, 32.0]},
+            "BAOAB": {"gaussian": [], "student_t": [], "cauchy": [8.0, 16.0]},
+        },
+        "gamma_values": [0.5, 1.0, 2.0, 5.0],
+        "n_steps": 50_000,
+        "burn_in": 5_000,
+        "nu": 5.0,
+        "seeds": list(range(20)),
+    },
+    # ----- Additional calibration values (plan §4.8, step 8): the mixture changes
+    # from "all succeed" (a=6) to "all fail" (a=8), so a=7 is added; the double well
+    # is easy for every beta in {1, 4, 8}, so beta=16, 32 are added. Same settings as
+    # `calibration`; the double-well eta grids extend downwards (best eta ~ 1/beta).
+    "calibration_extra": {
+        "algorithms": ["ULA", "MALA", "BAOAB"],
+        "distributions": ["gaussian_mixture", "double_well"],
+        "d_values": [10],
+        "eta": {
+            "ULA":   {"gaussian_mixture": [0.05, 0.1, 0.3, 0.5, 1.0],
+                       "double_well": [0.0005, 0.001, 0.002, 0.003, 0.005, 0.01, 0.03, 0.05]},
+            "MALA":  {"gaussian_mixture": [0.1, 0.2, 0.3, 0.5, 1.0, 1.5],
+                       "double_well": [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1]},
+            "BAOAB": {"gaussian_mixture": [0.1, 0.3, 0.5, 1.0, 1.5, 2.0, 3.0],
+                       "double_well": [0.005, 0.01, 0.02, 0.03, 0.05, 0.1, 0.3]},
+        },
+        "gamma_values": [0.5, 1.0, 2.0],
+        "target_params": {
+            "gaussian_mixture": [{"centers": (-7.0, 0.0, 7.0)}],
+            "double_well":      [{"beta": 16.0}, {"beta": 32.0}],
+        },
         "n_steps": 50_000,
         "burn_in": 5_000,
         "nu": 5.0,
@@ -575,19 +856,16 @@ def build_configs(preset: dict, n_steps_override: int | None = None,
         preset["algorithms"], preset["distributions"], preset["d_values"], preset["seeds"]
     ):
         eta_list = preset["eta"][algorithm][distribution]
-        # kappa is swept only for the anisotropic Gaussian; None elsewhere.
-        if distribution == "anisotropic_gaussian":
-            kappa_list = preset.get("kappa_values", [100.0])
-        else:
-            kappa_list = [None]
+        # One run per entry of target_params; a missing target uses its defaults.
+        params_list = preset.get("target_params", {}).get(distribution, [{}])
         nu_val = nu if distribution == "student_t" else None
-        for eta, kappa in itertools.product(eta_list, kappa_list):
+        for eta, params in itertools.product(eta_list, params_list):
             gamma_list = preset["gamma_values"] if algorithm == "BAOAB" else [None]
             for gamma in gamma_list:
                 configs.append(ExperimentConfig(
                     algorithm=algorithm, distribution=distribution, d=d,
                     eta=eta, gamma=gamma, nu=nu_val,
-                    n_steps=n_steps, burn_in=burn_in, seed=seed, kappa=kappa,
+                    n_steps=n_steps, burn_in=burn_in, seed=seed, target_params=dict(params),
                 ))
     return configs
 
@@ -632,6 +910,16 @@ def write_excel(output_path: str, summary_rows: list[dict], per_dim_rows: list[d
         config_df.to_excel(writer, sheet_name="config", index=False)
 
 
+def _run_safe(cfg: ExperimentConfig):
+    """run_one for one chain; returns (summary_row, per_dim_rows, seconds, error)."""
+    t0 = time.perf_counter()
+    try:
+        s_row, d_rows = run_one(cfg)
+        return s_row, d_rows, time.perf_counter() - t0, None
+    except Exception as exc:  # noqa: BLE001 - report the failure and keep going
+        return None, None, time.perf_counter() - t0, str(exc)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preset", choices=list(PRESETS.keys()), default="default",
@@ -640,6 +928,9 @@ def main():
                         help="Override n_steps for all runs")
     parser.add_argument("--burn-in", type=int, default=None,
                         help="Override burn_in for all runs")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Number of parallel processes (default: 1). Results are identical; "
+                             "only the time columns (runtime_seconds, ess_per_sec) can differ.")
     parser.add_argument("--output", type=str, default=None,
                         help="Output xlsx path (default: experiments/results/extension/results_<preset>_<ts>.xlsx)")
     args = parser.parse_args()
@@ -656,35 +947,47 @@ def main():
         output_path = args.output
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
-    print(f"Preset: {args.preset}  | runs: {len(configs)}  | n_steps={n_steps_used}, burn_in={burn_in_used}")
+    print(f"Preset: {args.preset}  | runs: {len(configs)}  | n_steps={n_steps_used}, burn_in={burn_in_used}"
+          f"  | workers: {args.workers}")
     print(f"Output: {output_path}\n")
 
     summary_rows: list[dict] = []
     per_dim_rows: list[dict] = []
 
     t_start = time.perf_counter()
-    for idx, cfg in enumerate(configs, start=1):
-        try:
-            t0 = time.perf_counter()
-            s_row, d_rows = run_one(cfg)
-            dt = time.perf_counter() - t0
+    # Chains are independent (each has its own seed), so they can run in parallel
+    # processes. executor.map returns the results in the order of `configs`, so the
+    # output rows are in the same order as in a single-process run.
+    if args.workers > 1:
+        from concurrent.futures import ProcessPoolExecutor
+        executor = ProcessPoolExecutor(max_workers=args.workers)
+        results = executor.map(_run_safe, configs, chunksize=1)
+    else:
+        executor = None
+        results = map(_run_safe, configs)
+    for idx, (cfg, (s_row, d_rows, dt, error)) in enumerate(zip(configs, results), start=1):
+        if error is None:
             summary_rows.append(s_row)
-            per_dim_rows.extend(d_rows)
-            print(f"[{idx:>4}/{len(configs)}] OK ({dt:6.2f}s) {cfg.label()}")
-        except Exception as exc:
-            print(f"[{idx:>4}/{len(configs)}] FAIL {cfg.label()}: {exc}")
+            if cfg.d <= PER_DIM_MAX_D:
+                per_dim_rows.extend(d_rows)
+            print(f"[{idx:>4}/{len(configs)}] OK ({dt:6.2f}s) {cfg.label()}", flush=True)
+        else:
+            print(f"[{idx:>4}/{len(configs)}] FAIL {cfg.label()}: {error}", flush=True)
             summary_rows.append({
                 "algorithm": cfg.algorithm,
                 "distribution": cfg.distribution,
                 "d": cfg.d,
                 "eta": cfg.eta,
                 "gamma": cfg.gamma if cfg.gamma is not None else float("nan"),
+                "target_params": cfg.params_label(),
                 "nu": cfg.nu if cfg.nu is not None else float("nan"),
                 "n_steps": cfg.n_steps,
                 "burn_in": cfg.burn_in,
                 "seed": cfg.seed,
-                "error": str(exc),
+                "error": error,
             })
+    if executor is not None:
+        executor.shutdown()
 
     total_dt = time.perf_counter() - t_start
     write_excel(output_path, summary_rows, per_dim_rows, args.preset, preset,

@@ -41,6 +41,12 @@ CONV_GROUP = ["algorithm", "distribution", "d", "eta", "gamma", "nu",
 AGG_RULES: dict[str, tuple[str, str, str]] = {
     # KS and quantile errors: median + IQR (skew-resistant for heavy-tail metrics)
     "ks_stat_mean":         ("median", "q25", "q75"),
+    # b^2 and mode occupancy: median + IQR (skewed; used by the calibration criterion)
+    "b2_avg":               ("median", "q25", "q75"),
+    "b2_grouped":           ("median", "q25", "q75"),
+    "b2":                   ("median", "q25", "q75"),
+    "mode_occupancy_error": ("median", "q25", "q75"),
+    "mode_transition_rate": ("median", "q25", "q75"),
     "quantile_mae_avg":     ("median", "q25", "q75"),
     "quantile_mae_q0.025":  ("median", "q25", "q75"),
     "quantile_mae_q0.5":    ("median", "q25", "q75"),
@@ -187,6 +193,31 @@ def process(xlsx_path: str, kind: str, output: str | None) -> str:
     per_dim_df = pd.read_excel(xlsx_path, sheet_name=per_dim_sheet) \
                  if per_dim_sheet in xls.sheet_names else None
 
+    # Empty cells (for example a b^2 that overflowed) can make a column text;
+    # read every column that is mostly numeric as numbers.
+    for col in summary_df.columns:
+        if summary_df[col].dtype == object and col not in ("algorithm", "distribution",
+                                                             "target_params", "error"):
+            num = pd.to_numeric(summary_df[col], errors="coerce")
+            if num.notna().sum() >= 0.5 * summary_df[col].notna().sum():
+                summary_df[col] = num
+    # Files written before the divergence fix in comprehensive_diagnostics.py
+    # (non-finite samples were not counted): a chain whose sample mean is not
+    # finite has diverged. Its exact rate is unknown, so it is marked with 1.0.
+    if "empirical_mean_avg" in summary_df.columns and "divergence_rate" in summary_df.columns:
+        not_finite = ~np.isfinite(pd.to_numeric(summary_df["empirical_mean_avg"], errors="coerce"))
+        if not_finite.any():
+            summary_df.loc[not_finite, "divergence_rate"] = np.maximum(
+                summary_df.loc[not_finite, "divergence_rate"].fillna(0.0), 1.0)
+            print(f"  marked {int(not_finite.sum())} chains with non-finite moments as divergent")
+
+    # Target parameters (e.g. "b=0.03") are part of the configuration when present.
+    if "target_params" in summary_df.columns:
+        group_keys = group_keys + ["target_params"]
+        summary_df["target_params"] = summary_df["target_params"].fillna("")
+        if per_dim_df is not None and "target_params" in per_dim_df.columns:
+            per_dim_df["target_params"] = per_dim_df["target_params"].fillna("")
+
     # Sanity check group keys
     missing = [k for k in group_keys if k not in summary_df.columns]
     if missing:
@@ -197,7 +228,7 @@ def process(xlsx_path: str, kind: str, output: str | None) -> str:
     print(f"  -> {len(agg_summary)} configurations")
 
     agg_per_dim = None
-    if per_dim_df is not None:
+    if per_dim_df is not None and not per_dim_df.empty:   # empty when all d > 100
         agg_per_dim = aggregate_per_dim(per_dim_df, group_keys)
         print(f"  per_dim: {len(per_dim_df)} rows -> {len(agg_per_dim)} aggregated rows")
 

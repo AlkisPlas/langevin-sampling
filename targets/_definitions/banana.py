@@ -106,6 +106,22 @@ class BananaDiagnostics(ComprehensiveDiagnostics):
     def theoretical_variance(self, dim):
         return float(self.V0) if dim % 2 == 0 else float(self.var_bent)
 
+    def b2_group(self, dim):
+        """Group of the coordinate for b2_grouped: coordinates with the same
+        distribution share a group (see experiments/run_experiments.py)."""
+        return dim % 2                         # 0 = wide, 1 = bent
+
+    def b2_functions(self, dim):
+        """Functions f = x_dim**p of the b^2 metric, as (p, E[f], Var[f]).
+
+        See Hoffman & Sountsov (2022); an empty list excludes the coordinate.
+        """
+        V0, b = self.V0, self.b
+        if dim % 2 == 0:                       # wide coordinate ~ N(0, V0)
+            return [(2, float(V0), 2.0 * V0**2)]
+        # bent coordinate: z + b (y^2 - V0), z ~ N(0,1), y ~ N(0,V0)
+        return [(2, float(self.var_bent), 2.0 + 8.0 * b**2 * V0**2 + 56.0 * b**4 * V0**4)]
+
 
 def exact_samples(d, n, rng, V0=BANANA_V0, b=BANANA_B):
     if d % 2 != 0:

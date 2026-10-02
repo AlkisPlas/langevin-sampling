@@ -26,8 +26,9 @@ def _broadcast_scale(scale, d):
 class Numerical1D:
     """Normalised 1D distribution from an unnormalised log-density, on a grid.
 
-    Provides cdf, quantile, mean and variance by quadrature. Used for the
-    separable double-well marginal (identical across coordinates).
+    Provides cdf, quantile, mean, variance and the raw moments m2 = E[x^2],
+    m4 = E[x^4] by quadrature. Used for the separable double-well marginal
+    (identical across coordinates).
     """
 
     def __init__(self, logpdf, lo, hi, n=8001):
@@ -42,6 +43,8 @@ class Numerical1D:
         self.cdf_grid = cdf / cdf[-1]
         self.mean = float(_trapz(self.grid * pdf, self.grid))
         self.var = float(_trapz((self.grid - self.mean) ** 2 * pdf, self.grid))
+        self.m2 = float(_trapz(self.grid ** 2 * pdf, self.grid))
+        self.m4 = float(_trapz(self.grid ** 4 * pdf, self.grid))
 
     def cdf(self, x):
         return np.interp(x, self.grid, self.cdf_grid)

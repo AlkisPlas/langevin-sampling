@@ -95,6 +95,18 @@ class FunnelDiagnostics(ComprehensiveDiagnostics):
     def theoretical_variance(self, dim):
         return float(self.sigma_v**2) if dim == 0 else self.var_xi
 
+    def b2_functions(self, dim):
+        """Functions f = x_dim**p of the b^2 metric, as (p, E[f], Var[f]).
+
+        See Hoffman & Sountsov (2022); an empty list excludes the coordinate.
+        """
+        # Only the neck v: Var[x_i^2] = 3 e^{2 sigma_v^2} - e^{sigma_v^2} is so large
+        # for the other coordinates that b^2 cannot tell a good chain from a bad one.
+        if dim != 0:
+            return []
+        s2 = float(self.sigma_v**2)
+        return [(1, 0.0, s2), (2, s2, 2.0 * s2**2)]
+
 
 def exact_samples(d, n, rng, sigma_v=FUNNEL_SIGMA_V):
     v = rng.normal(0.0, sigma_v, size=n)
