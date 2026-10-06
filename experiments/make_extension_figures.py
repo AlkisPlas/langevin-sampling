@@ -74,7 +74,7 @@ SCALING_B = ["results_scaling_B1_20261001_204724", "results_scaling_B1_extra_202
              "results_scaling_B2_20261001_223034", "results_scaling_B2_extra_20261002_104132"]
 SCALING_A = ["results_scaling_A_high_20261002_024016", "results_scaling_A_high_extra_20261002_094835"]
 CALIBRATION = ["results_calibration_20260929_143922", "results_calibration_extra_20260930_104420"]
-CONVERGENCE_B = "convergence_extension_20261002_122239"
+CONVERGENCE_B = "convergence_extension_20261003_161426"  # includes the tail-weight targets at d = 20
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +353,179 @@ def fig_a_scaling(best_a):
     save(fig, "a_cauchy_dimension_scaling")
 
 
+
+# ---------------------------------------------------------------------------
+# Unified figures: all eight targets in one figure (4 x 2 panels, full page width)
+# ---------------------------------------------------------------------------
+TAIL_ORDER = ["gaussian", "student_t", "cauchy"]
+ALL_ORDER = TAIL_ORDER + B_ORDER
+ALL_LABEL = {**DIST_LABEL, **B_LABEL}
+ALL_SHORT = {"gaussian": "Gaussian", "student_t": "Student-$t$", "cauchy": "Cauchy",
+             "anisotropic_gaussian": "Anisotropic", "banana": "Banana",
+             "gaussian_mixture": "Mixture", "funnel": "Funnel", "double_well": "Double well"}
+# Primary metric of each target: KS for the tail-weight targets (b^2 is not defined
+# for the Cauchy), b2_grouped for the others.
+PRIMARY = {**{t: "ks_stat_mean" for t in TAIL_ORDER}, **{t: "b2_grouped" for t in B_ORDER}}
+PRIMARY_LABEL = {"ks_stat_mean": "KS", "b2_grouped": r"$b^2$"}
+GRID_FIGSIZE = (7.2, 9.4)   # 4 x 2 panels, one page at full text width
+
+
+def _best_all(grid_a, grid_b):
+    """Best configuration per (target, algorithm, d) by each target's primary metric."""
+    return pd.concat([_best(grid_a, "ks_stat_mean"), _best(grid_b, "b2_grouped")], ignore_index=True)
+
+
+def _grid(n_rows=4, n_cols=2, figsize=GRID_FIGSIZE):
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    return fig, np.atleast_1d(axes).ravel()
+
+
+def _finish(fig, axes, name, xlabel, ylabel, n_cols=2):
+    """Shared legend above the panels, x labels on the bottom row, y labels on the left column."""
+    used = [ax for ax in axes if ax.has_data()]
+    for ax in axes:
+        if not ax.has_data():
+            ax.set_axis_off()
+    for ax in used[-n_cols:]:
+        ax.set_xlabel(xlabel)
+    for i, ax in enumerate(axes):
+        if i % n_cols == 0 and ax.has_data():
+            ax.set_ylabel(ylabel)
+    handles, labels = used[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=len(labels), frameon=False,
+               bbox_to_anchor=(0.5, 1.0))
+    fig.tight_layout(rect=(0, 0, 1, 0.965))
+    save(fig, name)
+
+
+def fig_all_vs_d(best, metric, name, ylabel, log_y=True, ref=None, ymin_top=None):
+    fig, axes = _grid()
+    for ax, target in zip(axes, ALL_ORDER):
+        _metric_vs(ax, best, target, "d", metric, log_y=log_y)
+        if ref is not None:
+            ax.axhline(ref, color="black", linestyle="--", linewidth=0.9)
+        if not log_y:
+            c = best[best["distribution"] == target][f"{metric}_central"].to_numpy(float)
+            top = np.nanmax(c) * 1.15 if np.isfinite(c).any() else 1.0
+            ax.set_ylim(0.0, max(top, ymin_top or 0.0))
+        ax.set_title(ALL_LABEL[target])
+    _finish(fig, axes, name, r"Dimension $d$", ylabel)
+
+
+def fig_all_primary_vs_d(best):
+    """Primary metric against d: KS for the tail-weight targets, b^2 for the others."""
+    fig, axes = _grid()
+    for ax, target in zip(axes, ALL_ORDER):
+        m = PRIMARY[target]
+        _metric_vs(ax, best, target, "d", m)
+        if m == "b2_grouped":
+            ax.axhline(B2_THRESHOLD, color="black", linestyle="--", linewidth=0.9)
+        ax.set_title(f"{ALL_LABEL[target]}: {PRIMARY_LABEL[m]}")
+    _finish(fig, axes, "all_primary_vs_d", r"Dimension $d$", "Median (IQR)")
+
+
+def fig_all_best_bars(best):
+    """d = 10: KS for all eight targets (top) and b^2 for the five with b^2 (bottom)."""
+    d10 = best[best["d"] == 10]
+    fig, axes = plt.subplots(2, 1, figsize=(7.2, 5.6))
+    width = 0.26
+    for ax, metric, order, ylab in [(axes[0], "ks_stat_mean", ALL_ORDER, "KS (median, IQR)"),
+                                    (axes[1], "b2_grouped", B_ORDER, r"$b^2$ (median, IQR)")]:
+        x = np.arange(len(order))
+        for i, algo in enumerate(ALGO_ORDER):
+            r = d10[d10["algorithm"] == algo].set_index("distribution").reindex(order)
+            c = r[f"{metric}_central"].to_numpy(float)
+            err = np.vstack([c - r[f"{metric}_low"].to_numpy(float), r[f"{metric}_high"].to_numpy(float) - c])
+            ax.bar(x + (i - 1) * width, c, width * 0.92, yerr=err, color=ALGO_COLOR[algo],
+                   label=algo, capsize=2, error_kw={"linewidth": 0.8})
+        ax.set_xticks(x)
+        ax.set_xticklabels([ALL_SHORT[t] for t in order])
+        ax.set_yscale("log")
+        ax.set_ylabel(ylab)
+    axes[1].axhline(B2_THRESHOLD, color="black", linestyle="--", linewidth=0.9)
+    axes[0].legend(loc="upper left", ncol=3, frameon=False)
+    axes[0].set_title(r"KS at the best configuration, $d=10$")
+    axes[1].set_title(r"$b^2$ at the best configuration, $d=10$ (dashed: threshold 0.01)")
+    fig.tight_layout()
+    save(fig, "all_best_config_bars")
+
+
+def fig_all_mala_acceptance(grid_a, grid_b):
+    grid = pd.concat([grid_a, grid_b], ignore_index=True)
+    sub = grid[grid["algorithm"] == "MALA"]
+    ds = sorted(sub["d"].unique())
+    cmap = plt.get_cmap("viridis")
+    colors = {d: cmap(i / max(len(ds) - 1, 1)) for i, d in enumerate(ds)}
+    fig, axes = _grid()
+    for ax, target in zip(axes, ALL_ORDER):
+        t = sub[sub["distribution"] == target]
+        for d in ds:
+            r = t[t["d"] == d].sort_values("eta")
+            if not r.empty:
+                ax.plot(r["eta"], r["acceptance_rate_central"], marker="o", markersize=3,
+                        color=colors[d], label=f"$d={d}$")
+        ax.axhspan(0.2, 0.95, color="grey", alpha=0.10, linewidth=0)
+        ax.axhline(0.574, color="orange", linestyle="--", linewidth=0.9)
+        ax.set_xscale("log")
+        ax.set_ylim(0.0, 1.02)
+        ax.set_title(ALL_LABEL[target])
+    for ax in axes:                       # every panel: the x-axis is the step size
+        ax.set_xlabel(r"Step size $\eta$ (log scale)")
+    for i in range(0, 8, 2):
+        axes[i].set_ylabel("Acceptance rate")
+    handles = [plt.Line2D([], [], color=colors[d], marker="o", markersize=3, label=f"$d={d}$") for d in ds]
+    fig.legend(handles=handles, loc="upper center", ncol=5, frameon=False, fontsize=8,
+               bbox_to_anchor=(0.5, 1.0))
+    fig.tight_layout(rect=(0, 0, 1, 0.945))
+    save(fig, "all_mala_acceptance")
+
+
+def fig_all_baoab_gamma(grid_a, grid_b):
+    """Primary metric of BAOAB against gamma, at the best eta of each (target, gamma), d = 10."""
+    grid = pd.concat([grid_a, grid_b], ignore_index=True)
+    sub = _valid(grid[(grid["algorithm"] == "BAOAB") & (grid["d"] == 10)])
+    fig, axes = _grid()
+    for ax, target in zip(axes, ALL_ORDER):
+        m = PRIMARY[target]
+        t = sub[sub["distribution"] == target].dropna(subset=[f"{m}_central"])
+        r = t.loc[t.groupby("gamma")[f"{m}_central"].idxmin()].sort_values("gamma")
+        g = r["gamma"].to_numpy(float)
+        ax.fill_between(g, r[f"{m}_low"].to_numpy(float), r[f"{m}_high"].to_numpy(float),
+                        color=ALGO_COLOR["BAOAB"], alpha=0.18, linewidth=0)
+        ax.plot(g, r[f"{m}_central"].to_numpy(float), marker="^", color=ALGO_COLOR["BAOAB"], label="BAOAB")
+        if m == "b2_grouped":
+            ax.axhline(B2_THRESHOLD, color="black", linestyle="--", linewidth=0.9)
+        ax.set_xscale("log")
+        ax.set_xticks(g)
+        ax.set_xticklabels([f"{v:g}" for v in g])
+        ax.set_yscale("log")
+        ax.set_title(f"{ALL_LABEL[target]}: {PRIMARY_LABEL[m]}")
+    _finish(fig, axes, "all_baoab_gamma", r"Friction $\gamma$", "Median (IQR), best $\\eta$")
+
+
+def fig_all_convergence(conv):
+    """Convergence study at d = 20 (seven targets; the anisotropic target is not in it)."""
+    targets = [t for t in ALL_ORDER if t in set(conv["distribution"])]
+    specs = [("ks_stat_mean", "KS (median, IQR)", -0.5, True, "all_convergence_ks"),
+             ("ess_mean", "ESS (mean)", 1.0, True, "all_convergence_ess"),
+             ("tail_cov_ratio_q0.99", r"Tail coverage ratio, $q=0.99$", None, False, "all_convergence_tail")]
+    for metric, ylab, slope, log_y, name in specs:
+        fig, axes = _grid()
+        for ax, target in zip(axes, targets):
+            _metric_vs(ax, conv, target, "checkpoint", metric, log_y=log_y)
+            if slope is not None:
+                n = np.array([5e4, 1e6])
+                ref = conv[(conv["distribution"] == target) & (conv["checkpoint"] == 50_000)][f"{metric}_central"]
+                y0 = float(np.nanmedian(ref))
+                ax.plot(n, y0 * (n / n[0]) ** slope, color="grey", linestyle="--", linewidth=0.9,
+                        label=f"slope {slope:g}")
+            if not log_y:
+                ax.axhline(1.0, color="black", linestyle="--", linewidth=0.9)
+                c = conv[conv["distribution"] == target][f"{metric}_central"].to_numpy(float)
+                ax.set_ylim(0.0, max(TAIL_YMAX, np.nanmax(c) * 1.15))
+            ax.set_title(ALL_LABEL[target])
+        _finish(fig, axes, name, r"Chain length $N$", ylab)
+
 # ---------------------------------------------------------------------------
 # Tables
 # ---------------------------------------------------------------------------
@@ -420,6 +593,19 @@ def main():
     fig_calibration(sel)
     print("Part A figures...")
     fig_a_scaling(best_a)
+    print("Unified figures (all eight targets)...")
+    best_all = _best_all(grid_a, grid_b)
+    fig_all_best_bars(best_all)
+    fig_all_primary_vs_d(best_all)
+    fig_all_vs_d(best_all, "ks_stat_mean", "all_dimension_scaling_ks", "KS (median, IQR)")
+    fig_all_vs_d(best_all, "ess_mean", "all_ess_vs_d", "ESS (mean)")
+    fig_all_vs_d(best_all, "ess_per_sec", "all_ess_per_sec_vs_d", "ESS per second (mean)")
+    fig_all_vs_d(best_all, "tail_cov_ratio_q0.99", "all_tail_cov_vs_d", r"Tail coverage ratio, $q=0.99$",
+                 log_y=False, ref=1.0, ymin_top=TAIL_YMAX)
+    fig_all_vs_d(best_all, "quantile_mae_q0.975", "all_qmae_vs_d", r"q-MAE, $q=0.975$")
+    fig_all_mala_acceptance(grid_a, grid_b)
+    fig_all_baoab_gamma(grid_a, grid_b)
+    fig_all_convergence(conv_b)
     print("Tables...")
     table_calibration(sel)
     table_best_configs(best_b)

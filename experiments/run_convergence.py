@@ -77,6 +77,18 @@ EXTENSION_CONFIGS: list[dict] = [
     {"algorithm": "ULA",   "distribution": "double_well",      "eta": 0.01,  "gamma": None, "target_params": _DWELL},
     {"algorithm": "MALA",  "distribution": "double_well",      "eta": 0.005, "gamma": None, "target_params": _DWELL},
     {"algorithm": "BAOAB", "distribution": "double_well",      "eta": 0.1,   "gamma": 2.0,  "target_params": _DWELL},
+    # The three tail-weight targets at the same d = 20, so that all eight targets
+    # are compared at one dimension. Best configuration at d = 20 by the lowest
+    # median KS (results_high_d_only_regenerated), same filters.
+    {"algorithm": "ULA",   "distribution": "gaussian",         "eta": 0.1,   "gamma": None, "nu": None},
+    {"algorithm": "MALA",  "distribution": "gaussian",         "eta": 0.3,   "gamma": None, "nu": None},
+    {"algorithm": "BAOAB", "distribution": "gaussian",         "eta": 1.5,   "gamma": 0.5,  "nu": None},
+    {"algorithm": "ULA",   "distribution": "student_t",        "eta": 0.03,  "gamma": None, "nu": 5.0},
+    {"algorithm": "MALA",  "distribution": "student_t",        "eta": 0.3,   "gamma": None, "nu": 5.0},
+    {"algorithm": "BAOAB", "distribution": "student_t",        "eta": 0.6,   "gamma": 0.5,  "nu": 5.0},
+    {"algorithm": "ULA",   "distribution": "cauchy",           "eta": 0.2,   "gamma": None, "nu": None},
+    {"algorithm": "MALA",  "distribution": "cauchy",           "eta": 0.3,   "gamma": None, "nu": None},
+    {"algorithm": "BAOAB", "distribution": "cauchy",           "eta": 0.5,   "gamma": 0.5,  "nu": None},
 ]
 D_EXTENSION = 20
 
