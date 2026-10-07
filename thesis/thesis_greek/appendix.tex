@@ -8,7 +8,7 @@
 \section{Κώδικας Πειραμάτων}
 \label{sec:app-reproducibility}
 
-Ο πηγαίος κώδικας της εργασίας βρίσκεται σε αύτο το  \href{https://github.com/AlkisPlas/langevin-sampling}{αποθετήριο}. Τα κεντρικά πειραματικά scripts είναι:
+Ο πηγαίος κώδικας της εργασίας βρίσκεται σε αυτό το \href{https://github.com/AlkisPlas/langevin-sampling}{αποθετήριο}. Τα κεντρικά πειραματικά scripts είναι:
 
 \begin{itemize}
   \item \path{experiments/run_experiments.py}: εκτελεί τις $2{,}286 \times 20 = 45{,}720$
@@ -30,8 +30,7 @@
 \end{itemize}
 
 Όλα τα scripts εξαρτώνται από τις βιβλιοθήκες \texttt{numpy}, \texttt{scipy},
-\texttt{pandas}, \texttt{openpyxl} και \texttt{matplotlib}. Οι εκδόσεις πακέτων που
-χρησιμοποιήθηκαν αναφέρονται στην Ενότητα~\ref{sec:exp-design} (υποενότητα Υλοποίηση).
+\texttt{pandas}, \texttt{openpyxl} και \texttt{matplotlib}.
 
 \section{Ψευδοκώδικας Αλγορίθμων}
 \label{sec:app-pseudo}
@@ -58,14 +57,14 @@
 
 \begin{algorithmic}[1]
 \Require βήμα $\eta > 0$, $N$, $U$ και $\nabla U$, αρχικό $x_0$
-\State $x \gets x_0$; $a \gets 0$
+\State $x \gets x_0$; $g \gets \nabla U(x)$; $a \gets 0$
 \For{$k = 1, \ldots, N$}
   \State $\xi \sim \mathcal{N}(0, I_d)$
-  \State $x' \gets x - \eta\, \nabla U(x) + \sqrt{2\eta}\,\xi$
-  \State $\log r \gets U(x) - U(x') + \frac{1}{4\eta}\bigl(\|x' - x + \eta\nabla U(x)\|^2 - \|x - x' + \eta\nabla U(x')\|^2\bigr)$
+  \State $x' \gets x - \eta\, g + \sqrt{2\eta}\,\xi$; \quad $g' \gets \nabla U(x')$
+  \State $\log r \gets U(x) - U(x') + \frac{1}{4\eta}\bigl(\|x' - x + \eta g\|^2 - \|x - x' + \eta g'\|^2\bigr)$
   \State $u \sim \mathrm{Uniform}(0,1)$
   \If{$\log u < \log r$}
-    \State $x \gets x'$; $a \gets a + 1$
+    \State $x \gets x'$; $g \gets g'$; $a \gets a + 1$
   \EndIf
   \State Καταγραφή $X_k \gets x$
 \EndFor
@@ -77,13 +76,13 @@
 \begin{algorithmic}[1]
 \Require βήμα $\eta$, τριβή $\gamma$, $N$, $\nabla U$, αρχικό $(x_0, v_0)$
 \State $x, v \gets x_0, v_0$
-\State $a \gets \exp(-\gamma\eta)$, $s \gets \sqrt{1 - a^2}$
+\State $a \gets \exp(-\gamma\eta)$, $s \gets \sqrt{1 - a^2}$; $g \gets \nabla U(x)$
 \For{$k = 1, \ldots, N$}
-  \State $v \gets v - \tfrac{\eta}{2}\,\nabla U(x)$ \Comment{B}
+  \State $v \gets v - \tfrac{\eta}{2}\, g$ \Comment{B}
   \State $x \gets x + \tfrac{\eta}{2}\, v$ \Comment{A}
   \State $\xi \sim \mathcal{N}(0, I_d)$; $v \gets a\, v + s\, \xi$ \Comment{O}
   \State $x \gets x + \tfrac{\eta}{2}\, v$ \Comment{A}
-  \State $v \gets v - \tfrac{\eta}{2}\,\nabla U(x)$ \Comment{B}
+  \State $g \gets \nabla U(x)$; $v \gets v - \tfrac{\eta}{2}\, g$ \Comment{B}
   \State Καταγραφή $X_k \gets x$
 \EndFor
 \end{algorithmic}
@@ -96,11 +95,13 @@
 \path{metrics/comprehensive_diagnostics.py}.
 
 \paragraph{Αποτελεσματικό μέγεθος δείγματος (ESS).}
-Για κάθε συντεταγμένη $k$, υπολογίζεται η αμερόληπτη αυτοσυσχέτιση μέσω FFT
-$\hat\rho(\ell)$ έως lag $L = \min(N/2, 500)$. Χρησιμοποιείται ο εκτιμητής
-αρχικής θετικής ακολουθίας του \citet{geyer1992practical}: ξεκινώντας με
-$\hat\tau = 1$, συσσωρεύεται $\hat\tau \gets \hat\tau + 2\hat\rho(\ell)$
-όσο $\hat\rho(\ell) > 0.05$. Το ESS ανά συντεταγμένη είναι
+Για κάθε συντεταγμένη $k$, υπολογίζεται η εμπειρική αυτοσυσχέτιση
+$\hat\rho(\ell)$ μέσω FFT, έως lag $L = \min(N/2, 500)$. Ξεκινώντας με
+$\hat\tau = 1$, συσσωρεύεται $\hat\tau \gets \hat\tau + 2\hat\rho(\ell)$ για
+$\ell = 1, 2, \ldots$, έως το πρώτο lag με $\hat\rho(\ell) < 0.05$ ή έως το $L$.
+Έτσι το άθροισμα του~\eqref{eq:iat} κρατά μόνο τους πρώτους όρους. Όταν η
+αυτοσυσχέτιση μειώνεται αργά, το άθροισμα σταματά στο $L$ πριν οι όροι γίνουν
+μικροί. Τότε το $\hat\tau$ βγαίνει μικρότερο από το σωστό και το ESS μεγαλύτερο. Το ESS ανά συντεταγμένη είναι
 $\hat n_\mathrm{eff} = N / \hat\tau$. Το αναφερόμενο \path{ess_mean}
 είναι ο μέσος όρος ανά συντεταγμένη. \path{ess_min} και
 \path{ess_max} είναι τα ακραία ανά συντεταγμένη.
@@ -140,7 +141,7 @@ $D_n^{(k)} = \sup_x |\hat F_k(x) - F_k(x)|$ χρησιμοποιώντας
 \paragraph{Μεροληψίες ροπών.}
 $\left|\hat\mu_k - \mu_k\right|$ και $\left|\hat\sigma_k^2 -
 \sigma_k^2\right|$ κατά μέσο όρο ανά συντεταγμένη, όπου $\mu_k$ και
-$\sigma_k^2$ είναι η αναλυτική μέση τιμή και διακύμανση της περιθώριας
+$\sigma_k^2$ είναι η αναλυτική μέση τιμή και διασπορά της περιθώριας
 κατανομής. Για την κατανομή Cauchy αυτές είναι αόριστες και αναφέρονται ως
 \texttt{NaN}.
 

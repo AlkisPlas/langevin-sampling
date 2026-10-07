@@ -95,7 +95,9 @@ D_EXTENSION = 20
 CHECKPOINTS = [50_000, 100_000, 500_000, 1_000_000]
 N_TOTAL = max(CHECKPOINTS)
 BURN_IN = 5_000
-SEEDS = list(range(10))
+# Seeds 100-109: the best configurations were selected on seeds 0-19 of the grid runs,
+# so the convergence study uses chains that were not used for the selection.
+SEEDS = list(range(100, 110))
 D = 1
 
 

@@ -28,9 +28,9 @@ class MALA(ABC):
     def log_pdf(self, x):
         return -self.f(x)
 
-    # log multivariate Gaussian proposal density
-    def log_q(self, x, x_prime):
-        mu = x - self.eta * self.grad_f(x)
+    # log multivariate Gaussian proposal density, given the gradient at x
+    def log_q(self, x, x_prime, grad_x):
+        mu = x - self.eta * grad_x
         diff = x_prime - mu
         return (
             -0.5 * self.d * np.log(2 * np.pi)
@@ -38,31 +38,41 @@ class MALA(ABC):
             -0.25 / self.eta * np.dot(diff, diff)
         )
 
-    # proposal step
-    def get_proposal(self, x):
+    # proposal step, given the gradient at x
+    def get_proposal(self, x, grad_x):
         return (
-            x - self.eta * self.grad_f(x) + np.sqrt(2 * self.eta) * np.random.randn(self.d)
+            x - self.eta * grad_x + np.sqrt(2 * self.eta) * np.random.randn(self.d)
         )
 
     # Metropolis-Hastings acceptance log ratio
-    def compute_acceptance_log_ratio(self, x, x_prop):
+    def compute_acceptance_log_ratio(self, x, x_prop, log_pdf_x, log_pdf_prop,
+                                     grad_x, grad_prop):
         return (
-            self.log_pdf(x_prop)
-            + self.log_q(x_prop, x)
-            - self.log_pdf(x)
-            - self.log_q(x, x_prop)
+            log_pdf_prop
+            + self.log_q(x_prop, x, grad_prop)
+            - log_pdf_x
+            - self.log_q(x, x_prop, grad_x)
         )
 
     def run(self):
         x = self.x0.copy()
         self.n_accepted = 0  # Reset counter
 
+        # log density and gradient of the current state are kept between steps,
+        # so each proposal needs one new gradient and one new log density.
+        log_pdf_x = self.log_pdf(x)
+        grad_x = self.grad_f(x)
         for t in range(self.n_steps):
-            x_prop = self.get_proposal(x)
-            log_alpha = self.compute_acceptance_log_ratio(x, x_prop)
+            x_prop = self.get_proposal(x, grad_x)
+            log_pdf_prop = self.log_pdf(x_prop)
+            grad_prop = self.grad_f(x_prop)
+            log_alpha = self.compute_acceptance_log_ratio(
+                x, x_prop, log_pdf_x, log_pdf_prop, grad_x, grad_prop)
 
             if np.log(np.random.rand()) < log_alpha:
                 x = x_prop
+                log_pdf_x = log_pdf_prop
+                grad_x = grad_prop
                 self.n_accepted += 1
 
             self.samples[t] = x

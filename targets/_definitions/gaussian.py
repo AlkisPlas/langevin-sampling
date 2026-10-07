@@ -20,9 +20,12 @@ class GaussianULA(ULA):
         super().__init__(d, eta, n_steps, burn_in, x0, seed)
         self.mu = np.zeros(d) if mu is None else np.array(mu)
         self.Sigma = np.eye(d) if Sigma is None else np.array(Sigma)
-        self.Sigma_inv = np.linalg.inv(self.Sigma)
+        # Sigma = I (the default): None selects the O(d) form instead of a d x d product.
+        self.Sigma_inv = None if Sigma is None else np.linalg.inv(self.Sigma)
 
     def grad_f(self, x):
+        if self.Sigma_inv is None:
+            return x - self.mu
         return self.Sigma_inv @ (x - self.mu)
 
 
@@ -31,13 +34,18 @@ class GaussianMALA(MALA):
         super().__init__(d, eta, n_steps, burn_in, x0, seed)
         self.mu = np.zeros(d) if mu is None else np.array(mu)
         self.Sigma = np.eye(d) if Sigma is None else np.array(Sigma)
-        self.Sigma_inv = np.linalg.inv(self.Sigma)
+        # Sigma = I (the default): None selects the O(d) form instead of a d x d product.
+        self.Sigma_inv = None if Sigma is None else np.linalg.inv(self.Sigma)
 
     def f(self, x):
         diff = x - self.mu
+        if self.Sigma_inv is None:
+            return 0.5 * diff @ diff
         return 0.5 * diff @ self.Sigma_inv @ diff
 
     def grad_f(self, x):
+        if self.Sigma_inv is None:
+            return x - self.mu
         return self.Sigma_inv @ (x - self.mu)
 
 
@@ -47,13 +55,18 @@ class GaussianBAOAB(BAOAB):
         super().__init__(d, eta, gamma, n_steps, burn_in, x0, v0, seed)
         self.mu = np.zeros(d) if mu is None else np.array(mu)
         self.Sigma = np.eye(d) if Sigma is None else np.array(Sigma)
-        self.Sigma_inv = np.linalg.inv(self.Sigma)
+        # Sigma = I (the default): None selects the O(d) form instead of a d x d product.
+        self.Sigma_inv = None if Sigma is None else np.linalg.inv(self.Sigma)
 
     def f(self, x):
         diff = x - self.mu
+        if self.Sigma_inv is None:
+            return 0.5 * diff @ diff
         return 0.5 * diff @ self.Sigma_inv @ diff
 
     def grad_f(self, x):
+        if self.Sigma_inv is None:
+            return x - self.mu
         return self.Sigma_inv @ (x - self.mu)
 
 

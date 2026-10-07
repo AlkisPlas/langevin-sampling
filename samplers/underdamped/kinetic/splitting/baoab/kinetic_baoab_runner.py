@@ -42,9 +42,12 @@ class BAOAB(ABC):
     def run(self):
         x = self.x0.copy()
         v = self.v0.copy()
+        # The force of the last B step is reused in the first B step of the next one,
+        # so each step needs one new gradient.
+        force = self.half_force(x)
         for t in range(self.n_steps):
             # B: half force
-            v -= self.half_force(x)
+            v -= force
             # A: half drift
             x += self.half_drift(v)
             # O: Ornstein–Uhlenbeck
@@ -52,7 +55,8 @@ class BAOAB(ABC):
             # A: half drift
             x += self.half_drift(v)
             # B: half force
-            v -= self.half_force(x)
+            force = self.half_force(x)
+            v -= force
 
             self.samples[t] = x
 

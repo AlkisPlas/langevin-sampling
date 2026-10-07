@@ -54,8 +54,9 @@ class ComprehensiveDiagnostics(ABC):
 
     def compute_ess(self, dim=None):
         """
-        Compute Effective Sample Size using autocorrelation.
-        ESS = n / (1 + 2 * sum(rho_k)) where rho_k is autocorrelation at lag k
+        Compute Effective Sample Size with Geyer's initial positive sequence.
+        P_t = rho_{2t} + rho_{2t+1}; the sum stops before the first P_t <= 0.
+        tau = -1 + 2 * sum_{t=0}^{m} P_t, ESS = n / tau.
         """
         if dim is None:
             # Compute for all dimensions
@@ -64,18 +65,21 @@ class ComprehensiveDiagnostics(ABC):
         x = self.samples[:, dim]
         n = len(x)
 
-        # Compute autocorrelation
-        max_lag = min(n // 2, 500)
-        acf = self.compute_autocorrelation(x, max_lag=max_lag)
+        # Autocorrelation at every lag 0, ..., n - 1
+        acf = self.compute_autocorrelation(x, max_lag=n)
 
-        # Sum autocorrelations until they become negative or very small
-        # (initial positive sequence estimator)
-        tau = 1.0  # Start with 1 for rho_0 = 1
-        for k in range(1, len(acf)):
-            if acf[k] < 0.05:  # Stop when autocorrelation is small
-                break
-            tau += 2 * acf[k]
+        # Sums of adjacent pairs, up to the first non-positive one
+        n_pairs = n // 2
+        pairs = acf[0:2 * n_pairs:2] + acf[1:2 * n_pairs:2]
+        non_positive = np.flatnonzero(pairs <= 0)
+        m = non_positive[0] if non_positive.size else n_pairs
+        tau = -1.0 + 2.0 * np.sum(pairs[:m])
 
+        # A strongly antithetic chain (not reversible) can give tau <= 0, or tau > 0 but
+        # close to 0. The ESS is then not reliable and is reported as NaN: tau <= 0, or
+        # ESS > n log10(n) (the bound that Stan uses, tau >= 1 / log10(n)).
+        if tau < 1.0 / np.log10(n):
+            return float("nan")
         ess = n / tau
         return ess
 
