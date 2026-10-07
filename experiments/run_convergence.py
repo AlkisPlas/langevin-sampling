@@ -9,7 +9,7 @@ Design choice: instead of running 4 independent chains of 50k/100k/500k/1M
 identical to a standalone shorter run, so the prefix view gives strictly more
 information at strictly less cost.
 
-Output: experiments/results/extension/convergence_<study>_<ts>.xlsx (--study thesis | extension)
+Output: experiments/results/convergence_<study>_<ts>.xlsx (--study d1 | d20)
 """
 
 from __future__ import annotations
@@ -57,14 +57,14 @@ BEST_CONFIGS: list[dict] = [
     {"algorithm": "BAOAB", "distribution": "cauchy",    "eta": 0.5,  "gamma": 0.5,  "nu": None},
 ]
 
-# Extension (plan E6): best configuration of each algorithm at d = 20 on the four
+# d = 20 (plan E6): best configuration of each algorithm at d = 20 on the four
 # targets where some algorithm fails, at the calibrated difficulty (plan §4.8,
 # table T2). Selected by the lowest median b2_grouped over 20 seeds in the
-# dimension-scaling runs (experiments/results/extension/scaling_B_best.csv),
+# dimension-scaling runs (experiments/results/scaling_B_best.csv),
 # subject to divergence_rate == 0 and (MALA only) acceptance in [0.2, 0.95].
 _FUNNEL, _BANANA = {"sigma_v": 2.0}, {"b": 0.03}
 _MIXTURE, _DWELL = {"centers": (-6.0, 0.0, 6.0)}, {"beta": 16.0}
-EXTENSION_CONFIGS: list[dict] = [
+BEST_CONFIGS_D20: list[dict] = [
     {"algorithm": "ULA",   "distribution": "funnel",           "eta": 0.01,  "gamma": None, "target_params": _FUNNEL},
     {"algorithm": "MALA",  "distribution": "funnel",           "eta": 0.1,   "gamma": None, "target_params": _FUNNEL},
     {"algorithm": "BAOAB", "distribution": "funnel",           "eta": 0.2,   "gamma": 1.0,  "target_params": _FUNNEL},
@@ -79,7 +79,7 @@ EXTENSION_CONFIGS: list[dict] = [
     {"algorithm": "BAOAB", "distribution": "double_well",      "eta": 0.1,   "gamma": 2.0,  "target_params": _DWELL},
     # The three tail-weight targets at the same d = 20, so that all eight targets
     # are compared at one dimension. Best configuration at d = 20 by the lowest
-    # median KS (results_high_d_only_regenerated), same filters.
+    # median KS (results_scaling_A_mid), same filters.
     {"algorithm": "ULA",   "distribution": "gaussian",         "eta": 0.1,   "gamma": None, "nu": None},
     {"algorithm": "MALA",  "distribution": "gaussian",         "eta": 0.3,   "gamma": None, "nu": None},
     {"algorithm": "BAOAB", "distribution": "gaussian",         "eta": 1.5,   "gamma": 0.5,  "nu": None},
@@ -90,7 +90,7 @@ EXTENSION_CONFIGS: list[dict] = [
     {"algorithm": "MALA",  "distribution": "cauchy",           "eta": 0.3,   "gamma": None, "nu": None},
     {"algorithm": "BAOAB", "distribution": "cauchy",           "eta": 0.5,   "gamma": 0.5,  "nu": None},
 ]
-D_EXTENSION = 20
+D20 = 20
 
 CHECKPOINTS = [50_000, 100_000, 500_000, 1_000_000]
 N_TOTAL = max(CHECKPOINTS)
@@ -139,15 +139,15 @@ def _run_chain_args(args):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--study", choices=["thesis", "extension"], default="thesis",
-                        help="thesis: the 9 configurations of the original thesis (d=1, default); "
-                             "extension: the 12 configurations of plan E6 (d=20)")
+    parser.add_argument("--study", choices=["d1", "d20"], default="d1",
+                        help="d1: the 9 configurations at d=1 (default); "
+                             "d20: the 21 configurations of plan E6 (d=20)")
     parser.add_argument("--workers", type=int, default=1,
                         help="Number of parallel processes (default: 1). Results are identical; "
                              "only the time columns can differ.")
     args = parser.parse_args()
-    configs = BEST_CONFIGS if args.study == "thesis" else EXTENSION_CONFIGS
-    d = D if args.study == "thesis" else D_EXTENSION
+    configs = BEST_CONFIGS if args.study == "d1" else BEST_CONFIGS_D20
+    d = D if args.study == "d1" else D20
 
     summary_rows: list[dict] = []
     per_dim_rows: list[dict] = []
@@ -208,7 +208,7 @@ def main():
     config_df = pd.DataFrame(config_records)
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = os.path.join(_HERE, "results", "extension", f"convergence_{args.study}_{ts}.xlsx")
+    out_path = os.path.join(_HERE, "results", f"convergence_{args.study}_{ts}.xlsx")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:

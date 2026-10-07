@@ -24,3 +24,9 @@ experiments/results/**/*.xlsx
 *.out
 *.synctex.gz
 *.toc
+# Markdown notes and analysis documents (kept locally, not in git)
+*.md
+
+# Local backups of earlier results (kept locally, not in git)
+experiments/results_backup_*/
+experiments/results_convergence_seeds*/

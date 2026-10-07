@@ -2,13 +2,13 @@
 
 Κάθε γράφημα δείχνει το επίπεδο των δύο πιο χαρακτηριστικών συντεταγμένων του στόχου,
 με τις ακριβείς παραμέτρους που αναφέρει το thesis/proposed_targets_for_approval.md.
-Τα αρχεία αποθηκεύονται στο experiments/figures/extension/target_densities/ ως PNG.
+Τα αρχεία αποθηκεύονται στο experiments/figures/target_densities/ ως PNG.
 """
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures", "extension", "target_densities")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures", "target_densities")
 os.makedirs(OUT, exist_ok=True)
 
 CMAP = "viridis"

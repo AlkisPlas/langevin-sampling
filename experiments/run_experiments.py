@@ -460,7 +460,7 @@ PRESETS = {
         "nu": 5.0,
         "seeds": [0, 1, 2, 3, 4],
     },
-    "default": {
+    "scaling_A_low": {
         "algorithms": ["ULA", "MALA", "BAOAB"],
         "distributions": ["gaussian", "cauchy", "student_t"],
         "d_values": [1, 3, 5, 10],
@@ -502,14 +502,14 @@ PRESETS = {
         "nu": 5.0,
         "seeds": list(range(20)),
     },
-    # High-dimension extension preset. Runs *only* d in {20, 50, 100} on the
+    # Dimensional scaling, Part A, d in {20, 50, 100}. Runs *only* these d on the
     # three targets; the eta grids are anchored on the empirical d=10
     # optima (rather than on Roberts-Rosenthal predictions) and extended in
     # the direction the d=1->d=10 trend suggested. This preset does NOT
-    # overlap with the `default` preset's d in {1, 3, 5, 10}, so the two
+    # overlap with the `scaling_A_low` preset's d in {1, 3, 5, 10}, so the two
     # xlsx outputs can be aggregated independently and concatenated at
     # figure-generation time.
-    "high_d_only": {
+    "scaling_A_mid": {
         "algorithms": ["ULA", "MALA", "BAOAB"],
         "distributions": ["gaussian", "student_t", "cauchy"],
         "d_values": [20, 50, 100],
@@ -530,7 +530,7 @@ PRESETS = {
         "nu": 5.0,
         "seeds": list(range(20)),
     },
-    # Tiny d=50 variant for smoke-testing the high_d_only grid before
+    # Tiny d=50 variant for smoke-testing the scaling_A_mid grid before
     # committing to the full overnight run.
     "high_d_smoke": {
         "algorithms": ["ULA", "MALA", "BAOAB"],
@@ -750,9 +750,9 @@ PRESETS = {
         "seeds": list(range(20)),
     },
     # ----- Dimensional scaling, Part A, d in {200, 500, 1000} (plan §6, decision 12).
-    # The eta grids extend past the d = 100 optima of `high_d_only`, which were at a
+    # The eta grids extend past the d = 100 optima of `scaling_A_mid`, which were at a
     # grid edge in six of nine cases (Εργασία §4.6, item 3); BAOAB on the Gaussian
-    # stops below its stability limit eta = 2. gamma as in the original thesis.
+    # stops below its stability limit eta = 2. gamma as in `scaling_A_low`.
     "scaling_A_high": {
         "algorithms": ["ULA", "MALA", "BAOAB"],
         "distributions": ["gaussian", "student_t", "cauchy"],
@@ -922,8 +922,8 @@ def _run_safe(cfg: ExperimentConfig):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preset", choices=list(PRESETS.keys()), default="default",
-                        help="Parameter-grid preset (default: 'default')")
+    parser.add_argument("--preset", choices=list(PRESETS.keys()), default="scaling_A_low",
+                        help="Parameter-grid preset (default: 'scaling_A_low')")
     parser.add_argument("--n-steps", type=int, default=None,
                         help="Override n_steps for all runs")
     parser.add_argument("--burn-in", type=int, default=None,
@@ -932,7 +932,7 @@ def main():
                         help="Number of parallel processes (default: 1). Results are identical; "
                              "only the time columns (runtime_seconds, ess_per_sec) can differ.")
     parser.add_argument("--output", type=str, default=None,
-                        help="Output xlsx path (default: experiments/results/extension/results_<preset>_<ts>.xlsx)")
+                        help="Output xlsx path (default: experiments/results/results_<preset>_<ts>.xlsx)")
     args = parser.parse_args()
 
     preset = PRESETS[args.preset]
@@ -942,7 +942,7 @@ def main():
 
     if args.output is None:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = os.path.join(_HERE, "results", "extension", f"results_{args.preset}_{ts}.xlsx")
+        output_path = os.path.join(_HERE, "results", f"results_{args.preset}_{ts}.xlsx")
     else:
         output_path = args.output
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)

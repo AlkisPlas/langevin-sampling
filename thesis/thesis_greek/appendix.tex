@@ -16,14 +16,14 @@
         (Ενότητα~\ref{sec:app-results-table}).
   \item \path{experiments/run_convergence.py}: εκτελεί τις $21 \times 10 = 210$
         αλυσίδες των $10^6$ επαναλήψεων στις βέλτιστες διαμορφώσεις και γράφει το
-        \path{convergence_extension_<timestamp>.xlsx}.
+        \path{convergence_d20_<timestamp>.xlsx}.
   \item \path{experiments/aggregate_seeds.py}: διαβάζει ένα xlsx ανά εκτέλεση
         και προσθέτει ένα φύλλο \texttt{aggregated} με διάμεσο, IQR, μέση τιμή
         και τυπικό σφάλμα ανά διαμόρφωση.
-  \item \path{experiments/make_extension_figures.py}: αναδημιουργεί
+  \item \path{experiments/make_figures.py}: αναδημιουργεί
         τα συγκεντρωτικά σχήματα και τους πίνακες του Κεφαλαίου~\ref{chap:experiments} από τα
         συγκεντρωτικά αρχεία xlsx.
-  \item \path{experiments/make_extension_case_study_figures.py}: αναδημιουργεί
+  \item \path{experiments/make_case_study_figures.py}: αναδημιουργεί
         τα σχήματα των οκτώ μελετών περίπτωσης της
         Ενότητας~\ref{sec:case-studies} και τον πίνακα της μάζας στο φράγμα του διπλού
         πηγαδιού. Επανεκτελεί τις επιλεγμένες διαμορφώσεις με σταθερό τυχαίο σπόρο.
@@ -148,15 +148,15 @@ $\sigma_k^2$ είναι η αναλυτική μέση τιμή και διασ�
 \section{Πλήρη Αποτελέσματα Μελέτης Πλέγματος}
 \label{sec:app-results-table}
 
-Τα αποτελέσματα της μελέτης πλέγματος βρίσκονται σε βιβλία εργασίας Excel, ένα ανά
-ομάδα εκτελέσεων:
+Τα αποτελέσματα της μελέτης πλέγματος βρίσκονται στον φάκελο \path{experiments/results/},
+σε βιβλία εργασίας Excel, ένα ανά ομάδα εκτελέσεων:
 \begin{itemize}
 \item Γκαουσιανή, Student-$t$, Cauchy, $d \le 10$:
-      \path{experiments/results/original_thesis/results_default_20260525_104845.xlsx}·
+      \path{results_scaling_A_low_20260525_104845.xlsx}·
       $d \in \{20, 50, 100\}$:
-      \path{results_high_d_only_regenerated.xlsx}·
-      $d \in \{200, 500, 1000\}$: \path{experiments/results/extension/results_scaling_A_high_*.xlsx}.
-\item Ανισοτροπική Γκαουσιανή, μπανάνα, μείγμα, χωνί, διπλό πηγάδι: \path{experiments/results/extension/results_scaling_B1_*.xlsx}
+      \path{results_scaling_A_mid.xlsx}·
+      $d \in \{200, 500, 1000\}$: \path{results_scaling_A_high_*.xlsx}.
+\item Ανισοτροπική Γκαουσιανή, μπανάνα, μείγμα, χωνί, διπλό πηγάδι: \path{results_scaling_B1_*.xlsx}
       ($d \le 100$) και \path{results_scaling_B2_*.xlsx} ($d \ge 200$)· η επιλογή της
       δυσκολίας: \path{results_calibration_*.xlsx}.
 \end{itemize}
@@ -208,7 +208,7 @@ $\sigma_k^2$ είναι η αναλυτική μέση τιμή και διασ�
 \label{sec:app-convergence-table}
 
 Ο πλήρης πίνακας της μελέτης σύγκλισης στο $d=20$ βρίσκεται στο
-\path{experiments/results/extension/convergence_extension_20261003_161426.xlsx}
+\path{experiments/results/convergence_d20_20261003_161426.xlsx}
 στο φύλλο \path{convergence_summary} (γραμμές ανά εκτέλεση) και στο αρχείο
 \path{_agg.xlsx} (διάμεσοι και IQR ανά σημείο ελέγχου), για $21$ διαμορφώσεις
 (αλγόριθμος, κατανομή) με $10$ εκτελέσεις η καθεμία.
