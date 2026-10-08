@@ -1,303 +1,66 @@
 # Langevin Sampling Algorithms
 
-A comprehensive implementation of **Overdamped Langevin Sampling** algorithms (MALA and ULA) with extensive diagnostics for MCMC analysis.
-
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
-[![NumPy](https://img.shields.io/badge/NumPy-required-orange.svg)](https://numpy.org/)
-[![SciPy](https://img.shields.io/badge/SciPy-required-orange.svg)](https://scipy.org/)
-
----
-
-## 📊 Supported Distributions
-
-This implementation provides **6 distributions** covering a wide range of sampling challenges:
-
-| Distribution | Support | Tail Behavior | Modality | Difficulty | Use Case |
-|--------------|---------|---------------|----------|------------|----------|
-| **Gaussian** | ℝᵈ | Light (exponential) | Unimodal | ⭐ Easy | Baseline, testing |
-| **Exponential** | ℝ₊ᵈ | Light (exponential) | Unimodal | ⭐ Easy | Waiting times, lifetimes |
-| **Student-t** | ℝᵈ | Tunable (polynomial) | Unimodal | ⭐⭐ Moderate | Robust statistics, finance |
-| **Cauchy** | ℝᵈ | Very Heavy | Unimodal | ⭐⭐⭐ Hard | Heavy-tail modeling |
-| **Lognormal** | ℝ₊ᵈ | Light (exponential) | Unimodal | ⭐⭐ Moderate | Positive-valued data |
-| **Double-Well** | ℝᵈ | Custom | Bimodal | ⭐⭐⭐ Hard | Multimodal exploration |
-
-### Distribution Details
-
-#### 🔹 **Gaussian** `N(μ, Σ)`
-- **Density:** `p(x) ∝ exp(-½(x-μ)ᵀΣ⁻¹(x-μ))`
-- **Parameters:** Mean `μ`, covariance `Σ`
-- **Properties:** Well-behaved, fast mixing, theoretical baseline
-- **Default:** μ=0, Σ=0.5I + 0.5·ones (correlated structure)
-
-#### 🔹 **Exponential** `Exp(λ)`
-- **Density:** `p(x) = ∏ᵢ λᵢ exp(-λᵢxᵢ)` for x > 0
-- **Parameters:** Rate `λ` (inverse of scale)
-- **Properties:** Memoryless, positive support, constant gradient
-- **Default:** λ=1 (mean=1, variance=1)
-- **Mean:** 1/λ, **Variance:** 1/λ², **Median:** log(2)/λ ≈ 0.693/λ
-
-#### 🔹 **Student's t** `t(ν, μ, σ)`
-- **Density:** `p(x) ∝ (1 + ||standardized(x-μ)||²/ν)^(-(ν+d)/2)`
-- **Parameters:** Degrees of freedom `ν`, location `μ`, scale `σ`
-- **Properties:** Interpolates between Cauchy (ν=1) and Gaussian (ν→∞)
-- **Default:** ν=3 (moderate heavy tails), μ=0, σ=1
-- **Variance:** Exists for ν>2, equals ν/(ν-2)
-
-#### 🔹 **Cauchy** `Cauchy(location, scale)`
-- **Density:** `p(x) ∝ (scale² + ||x-location||²)^(-(d+1)/2)`
-- **Parameters:** Location, scale
-- **Properties:** No finite moments, very heavy tails, challenging to sample
-- **Default:** location=0, scale=1
-- **Note:** Special case of Student-t with ν=1
-
-#### 🔹 **Lognormal** `LogNormal(μ, σ)`
-- **Density:** `p(x) ∝ (1/∏xᵢ) exp(-½Σ((log(xᵢ)-μᵢ)/σᵢ)²)` for x>0
-- **Parameters:** Log-space mean `μ`, log-space std `σ`
-- **Properties:** Positive support, skewed, multiplicative processes
-- **Default:** μ=0, σ=1 (median=1)
-- **Median:** exp(μ)
-
-#### 🔹 **Double-Well** `f(x) = ¼x⁴ - ½x²`
-- **Potential:** Creates two wells at x ≈ ±1
-- **Properties:** Bimodal, tests mode-switching capability
-- **Challenges:** Requires sampler to transition between modes
-- **Note:** No closed-form theoretical quantiles
-
----
-
-## 🎯 Features
-
-### Algorithms Implemented
-
-#### **MALA** (Metropolis-Adjusted Langevin Algorithm)
-- ✅ Exact sampling in the limit η→0
-- ✅ Metropolis-Hastings correction ensures detailed balance
-- ✅ Tracks acceptance rate
-- ✅ Better for heavy-tailed distributions
-- 📘 **Update:** `x' = x - η∇f(x) + √(2η)ξ`, then accept/reject
-
-#### **ULA** (Unadjusted Langevin Algorithm)
-- ✅ Faster per iteration (no acceptance step)
-- ✅ Simple Euler-Maruyama discretization
-- ✅ O(η) discretization bias
-- ✅ Good for quick exploration
-- 📘 **Update:** `x_{t+1} = x_t - η∇f(x_t) + √(2η)ξ_t`
-
-### Distribution Diagnostics
-
-| Metric | Description | Purpose |
-|--------|-------------|---------|
-| **ESS** | Effective Sample Size | Measures efficiency accounting for autocorrelation |
-| **ACF** | Autocorrelation Function | Identifies mixing issues |
-| **Acceptance Rate** | % proposals accepted (MALA only) | Tune step size |
-| **Divergence Rate** | % numerically unstable samples | Numerical stability check |
-| **Quantile MAE** | Mean absolute error vs theory | Sampling accuracy |
-| **Tail Coverage** | Exploration of 1%, 5%, 95%, 99% quantiles | Tail behavior assessment |
-
-### Visualizations
-
-- 📈 **Trace plots** - Time series of samples
-- 📉 **Autocorrelation plots** - Mixing diagnostics
-- 📊 **Q-Q plots** - Sample vs theoretical quantiles
-- 📊 **Histograms** - Empirical distributions with theoretical markers
-
----
-
-## 🚀 Quick Start
-
-### Basic Usage
-
-```python
-import numpy as np
-from overdamped.mala.mala_example_gaussian import GaussianMALA, GaussianDiagnostics
-
-# 1. Create sampler
-sampler = GaussianMALA(
-    d=3,                    # dimension
-    eta=0.01,              # step size
-    n_steps=100000,        # total iterations
-    burn_in=10000,         # discard first 10k
-    seed=42                # reproducibility
-)
-
-# 2. Run sampling
-samples = sampler.run()
-
-# 3. Diagnostics
-diagnostics = GaussianDiagnostics(
-    samples,
-    d=3,
-    acceptance_rate=sampler.acceptance_rate
-)
-
-# 4. Print comprehensive report
-diagnostics.print_comprehensive_stats()
-
-# 5. Visualizations
-diagnostics.plot_trace(dims=[0, 1])
-diagnostics.plot_autocorrelation(max_lag=100, dims=[0, 1])
-diagnostics.plot_tail_exploration(dim=0)
-```
-
-### Custom Parameters
-
-```python
-# Gaussian with custom mean and covariance
-from overdamped.mala.mala_example_gaussian import GaussianMALA
-
-mu = np.array([1.0, 2.0, 3.0])
-Sigma = np.diag([1.0, 2.0, 3.0])  # diagonal covariance
-
-sampler = GaussianMALA(
-    d=3,
-    eta=0.01,
-    n_steps=100000,
-    burn_in=10000,
-    mu=mu,
-    Sigma=Sigma,
-    seed=42
-)
-```
-
-```python
-# Student-t with custom parameters
-from overdamped.mala.mala_example_student_t import StudentTMALA
-
-sampler = StudentTMALA(
-    d=3,
-    nu=5.0,                              # degrees of freedom
-    location=np.array([0.0, 0.0, 0.0]),
-    scale=np.array([1.0, 1.0, 1.0]),
-    eta=0.01,
-    n_steps=100000,
-    burn_in=10000,
-    seed=42
-)
-```
-
-### Running Examples
-
-All distributions have ready-to-run examples:
-
-```bash
-# MALA examples
-python overdamped/mala/mala_example_gaussian.py
-python overdamped/mala/mala_example_exponential.py
-python overdamped/mala/mala_example_student_t.py
-python overdamped/mala/mala_example_cauchy.py
-python overdamped/mala/mala_example_lognormal.py
-python overdamped/mala/mala_example_double_well.py
-
-# ULA examples
-python overdamped/ula/ula_example_gaussian.py
-python overdamped/ula/ula_example_exponential.py
-python overdamped/ula/ula_example_student_t.py
-python overdamped/ula/ula_example_cauchy.py
-python overdamped/ula/ula_example_lognormal.py
-python overdamped/ula/ula_example_double_well.py
-```
-
----
-
-## 🔧 Installation
-
-### Requirements
-
-```bash
-pip install numpy scipy matplotlib
-```
-
-**Versions tested:**
-- Python 3.7+
-- NumPy 1.19+
-- SciPy 1.5+
-- Matplotlib 3.1+
-
-### Setup
-
-```bash
-git clone <repository-url>
-cd langevin-sampling
-# No installation needed - ready to use!
-```
-
----
-
-## 📖 Usage Guide
-
-### 1. Choosing an Algorithm
-
-| Use MALA when: | Use ULA when: |
-|----------------|---------------|
-| ✓ Need exact sampling | ✓ Quick exploration |
-| ✓ Heavy-tailed distributions | ✓ Light-tailed distributions |
-| ✓ Final production sampling | ✓ Prototyping |
-| ✓ Can afford MH overhead | ✓ Need speed |
-
-### 2. Tuning Step Size (η)
-
-**MALA:** Check acceptance rate
-- Too low (< 20%): Decrease η
-- Too high (> 80%): Increase η
-- Target: 40-70% depending on distribution
-
-**ULA:** Check bias
-- Smaller η → less bias, slower mixing
-- Larger η → more bias, faster mixing
-- Rule of thumb: η ≈ 0.01 to 0.001
-
-### 3. Step Size Recommendations by Distribution
-
-| Distribution | MALA (η) | ULA (η) | Notes |
-|--------------|----------|---------|-------|
-| Gaussian | 0.01 - 0.05 | 0.01 - 0.02 | Well-behaved |
-| Exponential | 0.01 - 0.05 | 0.01 - 0.02 | Simple, constant gradient |
-| Student-t (ν>5) | 0.01 - 0.02 | 0.005 - 0.01 | Moderate tails |
-| Student-t (ν≤5) | 0.005 - 0.01 | 0.002 - 0.005 | Heavy tails |
-| Cauchy | 0.001 - 0.005 | 0.0005 - 0.002 | Very heavy tails |
-| Lognormal | 0.01 - 0.02 | 0.005 - 0.01 | Bounded support |
-| Double-Well | 0.005 - 0.01 | 0.002 - 0.005 | Multimodal |
-
-### 4. Interpreting Diagnostics
-
-#### ✅ **Good Sampling:**
-- ESS ratio > 10%
-- Acceptance rate 40-70% (MALA)
-- ACF decays to < 0.05 within 100 lags
-- Quantile MAE < 0.1
-- Tail coverage within 20% of expected
-
-#### ⚠️ **Warning Signs:**
-- ESS ratio < 5% → Increase n_steps or adjust η
-- Acceptance rate < 20% or > 80% → Adjust η
-- ACF remains high (> 0.1) after 200 lags → Decrease η
-- Divergence rate > 1% → Decrease η
-
----
-
-## 🎓 Mathematical Background
-
-### Langevin Dynamics
-
-Sample from distribution `π(x) ∝ exp(-f(x))` using:
-
-```
-dX_t = -∇f(X_t)dt + √2 dW_t
-```
-
-where `W_t` is standard Brownian motion.
-
-### Discretization
-
-**ULA (Euler-Maruyama):**
-```
-X_{t+1} = X_t - η∇f(X_t) + √(2η)ξ_t,  ξ_t ~ N(0,I)
-```
-
-**MALA (with Metropolis correction):**
-1. Propose: `X' = X_t - η∇f(X_t) + √(2η)ξ_t`
-2. Accept with probability: `min(1, π(X')q(X_t|X') / (π(X_t)q(X'|X_t)))`
-
-where `q(·|·)` is the proposal density.
-
----
+This repository contains Python code that compares three Langevin sampling algorithms
+(ULA, MALA and BAOAB). The code runs the algorithms on eight target distributions, in
+dimensions from 1 to 1000. It also computes diagnostic metrics and makes the figures.
+
+## What the study does
+
+A sampling algorithm makes a chain of points. After many steps, the points must have
+the distribution of a given target. The three algorithms use the gradient of the
+log-density of the target. They do not need the normalizing constant.
+
+The study has these steps:
+
+1. Run each algorithm on each target and in each dimension.
+2. Change the step size η on a grid. For BAOAB, also change the friction γ.
+3. Run each configuration with 20 different random seeds.
+4. Find the best configuration for each algorithm, target and dimension.
+5. Run the best configurations for 10⁶ steps. This shows if the error decreases with
+   more steps, or if it stays (bias).
+
+Each chain in the grid has 50,000 steps. The first 5,000 steps are not used (burn-in).
+The grid has 45,720 chains.
+
+## Algorithms
+
+| Algorithm | Step | Bias |
+|---|---|---|
+| ULA (Unadjusted Langevin Algorithm) | A gradient step plus Gaussian noise. | Yes. The bias is proportional to η. |
+| MALA (Metropolis-Adjusted Langevin Algorithm) | The ULA step is a proposal. A Metropolis–Hastings test accepts or rejects it. | No, for each η. |
+| BAOAB | The state has a position and a velocity (kinetic Langevin). The step has five parts: B, A, O, A, B. | Yes, but smaller. The bias is proportional to η². On a Gaussian target, the position has no bias. |
+
+Each algorithm uses one new gradient per step.
+
+## Target distributions
+
+| Target | Difficulty | Parameter | Dimensions d |
+|---|---|---|---|
+| Gaussian | None. It is the reference. | — | 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000 |
+| Student-t | Tails that decrease slowly | ν = 5 | 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000 |
+| Cauchy | Very heavy tails. No mean and no variance. | ν = 1 | 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000 |
+| Anisotropic Gaussian | The variances go from 1 to κ. | κ = 1000 | 2, 4, 10, 20, 50, 100, 200, 500, 1000 |
+| Banana | Curved dependence in each pair of coordinates | b = 0.03 | 2, 4, 10, 20, 50, 100, 200, 500, 1000 |
+| Gaussian mixture | Three peaks at −a, 0, a on the first coordinate, with low density between them | a = 6 | 2, 4, 10, 20, 50, 100, 200, 500, 1000 |
+| Funnel | The scale of the coordinates changes with the first coordinate v | σ_v = 2 | 2, 4, 10, 20, 50, 100, 200, 500, 1000 |
+| Double well | Two wells in each coordinate, with a barrier between them | β = 16 | 2, 4, 10, 20, 50, 100, 200, 500, 1000 |
+
+For each target, the code also gives the true mean, variance, quantiles and CDF of each
+coordinate. The metrics compare the samples with these values.
+
+## Metrics
+
+| Metric | What it measures | Best value |
+|---|---|---|
+| KS (Kolmogorov–Smirnov) | The largest distance between the CDF of the samples and the true CDF of a coordinate | 0 |
+| q-MAE | The error of the sample quantiles at q = 0.025, 0.5 and 0.975 | 0 |
+| Tail coverage | The fraction of samples beyond the true 1 %, 5 %, 95 % and 99 % quantiles, divided by the expected fraction | 1 |
+| b² | The squared error of a sample mean (of x_i² and, for the mixture and the double well, of x_i), divided by its true variance. A value below 0.01 is a success. | 0 |
+| ESS (effective sample size) | The number of independent samples that give the same information as the chain | High |
+| ESS per second | The ESS divided by the run time | High |
+| Acceptance rate | The fraction of accepted proposals (MALA only) | — |
+| Divergence rate | The fraction of samples that are not finite or larger than 10⁶ | 0 |
+| Peak metrics | The rate of jumps between peaks and the error of the mass in each peak (mixture and double well only) | — |
+
+The main metric is KS for the Gaussian, the Student-t and the Cauchy. It is b² for the
+other targets, because for some of their coordinates the true CDF has no formula.

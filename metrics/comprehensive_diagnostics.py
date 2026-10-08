@@ -54,8 +54,9 @@ class ComprehensiveDiagnostics(ABC):
 
     def compute_ess(self, dim=None):
         """
-        Compute Effective Sample Size using autocorrelation.
-        ESS = n / (1 + 2 * sum(rho_k)) where rho_k is autocorrelation at lag k
+        Compute Effective Sample Size with Geyer's initial positive sequence.
+        P_t = rho_{2t} + rho_{2t+1}; the sum stops before the first P_t <= 0.
+        tau = -1 + 2 * sum_{t=0}^{m} P_t, ESS = n / tau.
         """
         if dim is None:
             # Compute for all dimensions
@@ -64,18 +65,21 @@ class ComprehensiveDiagnostics(ABC):
         x = self.samples[:, dim]
         n = len(x)
 
-        # Compute autocorrelation
-        max_lag = min(n // 2, 500)
-        acf = self.compute_autocorrelation(x, max_lag=max_lag)
+        # Autocorrelation at every lag 0, ..., n - 1
+        acf = self.compute_autocorrelation(x, max_lag=n)
 
-        # Sum autocorrelations until they become negative or very small
-        # (initial positive sequence estimator)
-        tau = 1.0  # Start with 1 for rho_0 = 1
-        for k in range(1, len(acf)):
-            if acf[k] < 0.05:  # Stop when autocorrelation is small
-                break
-            tau += 2 * acf[k]
+        # Sums of adjacent pairs, up to the first non-positive one
+        n_pairs = n // 2
+        pairs = acf[0:2 * n_pairs:2] + acf[1:2 * n_pairs:2]
+        non_positive = np.flatnonzero(pairs <= 0)
+        m = non_positive[0] if non_positive.size else n_pairs
+        tau = -1.0 + 2.0 * np.sum(pairs[:m])
 
+        # A strongly antithetic chain (not reversible) can give tau <= 0, or tau > 0 but
+        # close to 0. The ESS is then not reliable and is reported as NaN: tau <= 0, or
+        # ESS > n log10(n) (the bound that Stan uses, tau >= 1 / log10(n)).
+        if tau < 1.0 / np.log10(n):
+            return float("nan")
         ess = n / tau
         return ess
 
@@ -114,16 +118,20 @@ class ComprehensiveDiagnostics(ABC):
     # ========================================
     def compute_divergence_rate(self, threshold=1e6):
         """
-        Compute the rate of divergent samples (samples exceeding threshold).
+        Compute the rate of divergent samples: samples that exceed the threshold
+        or are not finite (an overflow gives inf, then NaN, and a comparison with
+        NaN is always False, so the threshold test alone does not count it).
         """
-        n_divergent = np.sum(np.any(np.abs(self.samples) > threshold, axis=1))
+        bad = ~np.isfinite(self.samples) | (np.abs(self.samples) > threshold)
+        n_divergent = np.sum(np.any(bad, axis=1))
         return n_divergent / self.n_samples
 
     def compute_quantile_divergence(self):
         """
         Compute divergence between empirical and theoretical quantiles.
-        Returns mean absolute error across all dimensions and quantiles.
-        Returns None if theoretical quantiles are not available (NaN).
+        Returns the mean absolute error per dimension, over the dimensions that
+        have theoretical quantiles (dimensions without them are skipped).
+        Returns None if no dimension has theoretical quantiles.
         """
         divergences = []
         for dim in range(self.d):
@@ -131,13 +139,13 @@ class ComprehensiveDiagnostics(ABC):
             emp_quantiles = np.percentile(data, [q*100 for q in self.quantile_levels])
             theor_quantiles = np.array([self.quantile(q, dim=dim) for q in self.quantile_levels])
 
-            # Check if theoretical quantiles are available
+            # Skip dimensions without a closed-form marginal
             if np.any(np.isnan(theor_quantiles)):
-                return None
+                continue
 
             mae = np.mean(np.abs(emp_quantiles - theor_quantiles))
             divergences.append(mae)
-        return np.array(divergences)
+        return np.array(divergences) if divergences else None
 
 
     def plot_quantile_mae_over_time(self, checkpoints=None):
@@ -209,16 +217,15 @@ class ComprehensiveDiagnostics(ABC):
     def compute_tail_coverage(self, tail_quantiles=[0.01, 0.05, 0.95, 0.99]):
         """
         Measure how well the sampler explores the tails.
-        Returns the percentage of samples that reach various tail quantiles.
-        Returns None if theoretical quantiles are not available (NaN).
+        Returns the percentage of samples that reach various tail quantiles,
+        for the dimensions that have theoretical quantiles (dimensions without
+        them are skipped). Returns None if no dimension has them.
         """
-        # Check if theoretical quantiles are available
-        test_quantile = self.quantile(0.5, dim=0)
-        if np.isnan(test_quantile):
-            return None
-
         tail_stats = {}
         for dim in range(self.d):
+            # Skip dimensions without a closed-form marginal
+            if np.isnan(self.quantile(0.5, dim=dim)):
+                continue
             data = self.samples[:, dim]
             stats = {}
             for q in tail_quantiles:
@@ -235,7 +242,7 @@ class ComprehensiveDiagnostics(ABC):
                     'expected': q if q < 0.5 else (1 - q)
                 }
             tail_stats[f'dim_{dim}'] = stats
-        return tail_stats
+        return tail_stats if tail_stats else None
 
     def plot_tail_exploration(self, dim=0):
         """
