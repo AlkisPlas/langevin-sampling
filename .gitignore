@@ -24,6 +24,7 @@ __pycache__/
 *.toc
 # Markdown notes and analysis documents (kept locally, not in git)
 *.md
+!README.md
 
 # Local backups of earlier results (kept locally, not in git)
 experiments/results_backup_*/
